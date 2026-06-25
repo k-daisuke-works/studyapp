@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 scripts/extract_terms.py*)",
+      "Bash(python3 scripts/patch_terms.py*)",
+      "Bash(python3 -m http.server*)",
+      "Bash(wc *)",
+      "Bash(ls*)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(grep * /workspaces/studyapp/app.js)",
+      "Bash(grep * /workspaces/studyapp/style.css)",
+      "Bash(grep * /workspaces/studyapp/index.html)",
+      "Bash(find /workspaces/studyapp *)",
+      "Bash(grep * /workspaces/studyapp/scripts/extract_terms.py)",
+      "Bash(grep * /workspaces/studyapp/scripts/patch_terms.py)"
+    ],
+    "deny": [
+      "Bash(cat /workspaces/studyapp/data.json)",
+      "Bash(cat /workspaces/studyapp/index.html.bak)"
+    ]
+  }
+}
