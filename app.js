@@ -41,7 +41,7 @@
     PLAN_VERSION_KEY = "ap96_plan_version",
     LAST_ACTIVITY_KEY = "ap96_last_activity",
     ONBOARDING_KEY = "ap96_onboarding_complete",
-    PLAN_VERSION = "balanced-v3";
+    PLAN_VERSION = "queue-v4";
 
   let START = loadStart();
 
@@ -82,7 +82,7 @@
     try {
       const v = JSON.parse(localStorage.getItem(DONE_DATES_KEY) || "[]");
       if (Array.isArray(v))
-        return new Set(v.filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(s)));
+        return new Set(v.filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(s) && s <= todayId()));
     } catch {}
     return new Set();
   }
@@ -116,10 +116,16 @@
       String(d.getDate()).padStart(2, "0")
     );
   }
+  function isValidIsoDate(value) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+    const [year, month, day] = value.split("-").map(Number),
+      parsed = new Date(year, month - 1, day);
+    return isoDate(parsed) === value;
+  }
   function loadExamDate() {
     try {
       const saved = localStorage.getItem(EXAM_KEY);
-      if (saved) return saved;
+      if (saved && isValidIsoDate(saved)) return saved;
     } catch {}
     const d = new Date(START);
     d.setDate(d.getDate() + 95);
@@ -133,12 +139,13 @@
   function loadStart() {
     try {
       const saved = localStorage.getItem(START_KEY);
-      if (saved && /^\d{4}-\d{2}-\d{2}$/.test(saved)) {
+      if (saved && isValidIsoDate(saved)) {
         const d = new Date(saved + "T00:00:00");
         if (!isNaN(d.getTime())) return d;
       }
     } catch {}
-    return new Date(2026, 5, 24);
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate());
   }
 
   const termKey = (t) => t.sourceDay + "::" + t.w;
@@ -165,46 +172,78 @@
     const timeTermsPerDay = Math.max(
       1,
       Math.floor(knowledgeBudget() / NORMALIZED_CARD_MINUTES),
-    );
-    let totalDays;
-    if (planMode === "exam") {
-      const exam = localMidnight(examDate),
-        start = new Date(START.getFullYear(), START.getMonth(), START.getDate());
-      totalDays = Math.max(1, Math.floor((exam - start) / 86400000) + 1);
-    } else {
-      totalDays = Math.max(1, Math.ceil(ALL_TERMS.length / timeTermsPerDay));
-    }
-    const today = localMidnight(todayId()),
-      start = new Date(START.getFullYear(), START.getMonth(), START.getDate()),
-      elapsed = Math.floor((today - start) / 86400000) + 1,
-      todayDay = Math.max(1, Math.min(totalDays, elapsed));
-    return { totalDays, todayDay, timeTermsPerDay };
+      ),
+      today = todayId(),
+      completedBeforeToday = [...doneDates].filter((date) => date < today).length,
+      currentDay = completedBeforeToday + 1,
+      assignedPages = Object.keys(dailyPlans)
+        .filter((key) => /^p:\d+$/.test(key))
+        .map((key) => Number(key.slice(2)))
+        .filter((day) => day >= currentDay),
+      lastAssignedDay = assignedPages.length
+        ? Math.max(currentDay - 1, ...assignedPages)
+        : currentDay - 1,
+      assignedKeys = new Set(
+        Object.entries(dailyPlans)
+          .filter(([key]) => /^p:\d+$/.test(key))
+          .flatMap(([, keys]) => Array.isArray(keys) ? keys : []),
+      ),
+      unassigned = ALL_TERMS.filter(
+        (term) => !mastery[termKey(term)] && !assignedKeys.has(termKey(term)),
+      ).length;
+    const calculatedTotal = planMode === "exam"
+      ? completedBeforeToday + remainingDays()
+      : lastAssignedDay + Math.ceil(unassigned / timeTermsPerDay);
+    return {
+      totalDays: Math.max(currentDay, lastAssignedDay, calculatedTotal),
+      currentDay,
+      completedBeforeToday,
+      timeTermsPerDay,
+    };
   }
 
   function termsForStudyDay(day, schedule = planSchedule()) {
     const safeDay = Math.max(1, Math.min(schedule.totalDays, day));
-    let start, end;
-    if (planMode === "exam") {
-      start = Math.floor(((safeDay - 1) * ALL_TERMS.length) / schedule.totalDays);
-      end = Math.floor((safeDay * ALL_TERMS.length) / schedule.totalDays);
-    } else {
-      start = (safeDay - 1) * schedule.timeTermsPerDay;
-      end = Math.min(ALL_TERMS.length, start + schedule.timeTermsPerDay);
-    }
-    return ALL_TERMS.slice(start, end);
+    const key = "p:" + safeDay,
+      valid = new Map(ALL_TERMS.map((term) => [termKey(term), term])),
+      saved = (dailyPlans[key] || []).filter((termId) => valid.has(termId));
+    if (saved.length || dailyPlans[key]) return saved.map((termId) => valid.get(termId));
+    if (safeDay < schedule.currentDay) return [];
+
+    const assignedKeys = new Set(
+        Object.entries(dailyPlans)
+          .filter(([planKey]) => /^p:\d+$/.test(planKey))
+          .flatMap(([, keys]) => Array.isArray(keys) ? keys : []),
+      ),
+      candidates = ALL_TERMS.filter(
+        (term) => !mastery[termKey(term)] && !assignedKeys.has(termKey(term)),
+      ),
+      remainingPlanDays = Math.max(1, schedule.totalDays - safeDay + 1),
+      targetCount = planMode === "exam"
+        ? Math.ceil(candidates.length / remainingPlanDays)
+        : schedule.timeTermsPerDay,
+      selected = candidates.slice(0, targetCount);
+    dailyPlans[key] = selected.map(termKey);
+    saveObject(DAY_PLAN_KEY, dailyPlans);
+    return selected;
   }
 
-  function studyDateForDay(day) {
-    const d = new Date(START.getFullYear(), START.getMonth(), START.getDate());
-    d.setDate(d.getDate() + day - 1);
+  function studyDateForDay(day, schedule = planSchedule()) {
+    const pastDates = [...doneDates].filter((date) => date < todayId()).sort();
+    if (day < schedule.currentDay && pastDates[day - 1]) return pastDates[day - 1];
+    const d = localMidnight(todayId());
+    d.setDate(d.getDate() + day - schedule.currentDay);
     return isoDate(d);
   }
 
-  function studyDayForTermIndex(index, schedule = planSchedule()) {
-    return planMode === "exam"
-      ? Math.max(1, Math.min(schedule.totalDays,
-          Math.ceil(((index + 1) * schedule.totalDays) / ALL_TERMS.length)))
-      : Math.floor(index / schedule.timeTermsPerDay) + 1;
+  function resetOpenStudyPlan() {
+    const currentDay = planSchedule().currentDay,
+      firstOpenDay = currentDay + (doneDates.has(todayId()) ? 1 : 0);
+    for (const key of Object.keys(dailyPlans)) {
+      const match = key.match(/^p:(\d+)$/);
+      if (!match || Number(match[1]) >= firstOpenDay) delete dailyPlans[key];
+    }
+    saveObject(DAY_PLAN_KEY, dailyPlans);
   }
 
   function remainingDays() {
@@ -270,7 +309,7 @@
       capMinutes = knowledgeBudget(),
       schedule = planSchedule(),
       timeCount = schedule.timeTermsPerDay,
-      targetCount = termsForStudyDay(schedule.todayDay, schedule).length,
+      targetCount = termsForStudyDay(schedule.currentDay, schedule).length,
       plannedKnowledgeMinutes = targetCount * NORMALIZED_CARD_MINUTES,
       p = profile(),
       estimated = Math.ceil(plannedKnowledgeMinutes + p.review * 1.5 + 4 + p.past + p.afternoon),
@@ -281,11 +320,6 @@
       shortage: requiredMinutes > capMinutes,
       overload: requiredMinutes > 90,
     };
-  }
-
-  function resetTodayPlan() {
-    delete dailyPlans[todayId()];
-    saveObject(DAY_PLAN_KEY, dailyPlans);
   }
 
   function isThemeDone(themeNo) {
@@ -365,9 +399,9 @@
     return (
       '<div class="flashcard" data-key="' + esc(key) + '">' +
       '<div class="fc-front">' +
-      '<div class="term-name fc-trigger"><span>' + esc(t.w) + "</span>" +
+      '<button type="button" class="term-name fc-trigger" aria-expanded="false"><span>' + esc(t.w) + "</span>" +
       '<span class="fc-right">' + (state ? '<span class="fc-dot fc-dot-' + state + '"></span>' : "") + "</span>" +
-      "</div>" +
+      "</button>" +
       ab +
       "</div>" +
       '<div class="fc-back" hidden>' +
@@ -397,7 +431,7 @@
   function exportStudyData() {
     const data = {
       app: "ap96-study",
-      version: 2,
+      version: 3,
       exportedAt: new Date().toISOString(),
       doneDates: [...doneDates],
       mastery,
@@ -423,7 +457,7 @@
     reader.onload = () => {
       try {
         const data = JSON.parse(String(reader.result));
-        if (!data || data.app !== "ap96-study" || ![1, 2].includes(data.version))
+        if (!data || data.app !== "ap96-study" || ![1, 2, 3].includes(data.version))
           throw new Error("invalid");
         const validKeys = new Set(ALL_TERMS.map(termKey)),
           nextMastery = {};
@@ -436,13 +470,14 @@
             nextMasteryAt[key] = value;
         const nextPlans = {};
         for (const [id, keys] of Object.entries(data.dailyPlans || {}))
-          if (Array.isArray(keys)) nextPlans[id] = keys.filter((key) => validKeys.has(key));
+          if (/^p:\d+$/.test(id) && Array.isArray(keys))
+            nextPlans[id] = keys.filter((key) => validKeys.has(key));
         const minutes = Number(data.settings?.studyMinutes),
           mode = data.settings?.planMode,
           date = String(data.settings?.examDate || ""),
           startDate = String(data.settings?.startDate || "");
         const nextDoneDates = Array.isArray(data.doneDates)
-          ? data.doneDates.filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(s))
+          ? data.doneDates.filter((s) => isValidIsoDate(s) && s <= todayId())
           : [];
         const doImport = () => {
           localStorage.setItem(DONE_DATES_KEY, JSON.stringify(nextDoneDates));
@@ -453,9 +488,9 @@
           localStorage.setItem(DAY_PLAN_KEY, JSON.stringify(nextPlans));
           if ([15, 30, 45, 60].includes(minutes)) localStorage.setItem(TIME_KEY, String(minutes));
           if (["time", "exam"].includes(mode)) localStorage.setItem(MODE_KEY, mode);
-          if (/^\d{4}-\d{2}-\d{2}$/.test(date)) localStorage.setItem(EXAM_KEY, date);
-          if (/^\d{4}-\d{2}-\d{2}$/.test(startDate)) localStorage.setItem(START_KEY, startDate);
-          if (/^\d{4}-\d{2}-\d{2}$/.test(data.lastActivity || ""))
+          if (isValidIsoDate(date)) localStorage.setItem(EXAM_KEY, date);
+          if (isValidIsoDate(startDate)) localStorage.setItem(START_KEY, startDate);
+          if (isValidIsoDate(data.lastActivity || ""))
             localStorage.setItem(LAST_ACTIVITY_KEY, data.lastActivity);
           else localStorage.removeItem(LAST_ACTIVITY_KEY);
           localStorage.setItem(PLAN_VERSION_KEY, PLAN_VERSION);
@@ -513,9 +548,16 @@
     welcome.hidden = false;
     document.body.style.overflow = "hidden";
     document.getElementById("startFresh").onclick = () => {
-      try { localStorage.setItem(ONBOARDING_KEY, "1"); } catch {}
+      const today = todayId();
+      try {
+        localStorage.setItem(ONBOARDING_KEY, "1");
+        localStorage.setItem(START_KEY, today);
+      } catch {}
+      START = localMidnight(today);
       welcome.hidden = true;
       document.body.style.overflow = "";
+      currentStudyDay = null;
+      renderToday();
     };
     const button = document.getElementById("startImport"),
       file = document.getElementById("welcomeImportFile");
@@ -554,10 +596,10 @@
       planMode === "time"
         ? '<div class="active-setting"><span class="setting-label">今日確保できる時間</span>' +
           '<div class="time-options">' + options + "</div></div>"
-        : '<div class="active-setting"><label>受験予定日</label>' +
+        : '<div class="active-setting"><label for="examDate">受験予定日</label>' +
           '<input class="exam-date" id="examDate" type="date" value="' + esc(examDate) + '"></div>';
     const startSetting =
-      '<div class="active-setting" style="margin-top:8px"><label>学習開始日</label>' +
+      '<div class="active-setting" style="margin-top:8px"><label for="startDate">学習開始日</label>' +
       '<input class="exam-date" id="startDate" type="date" value="' + esc(isoDate(START)) + '"></div>';
     const afternoon = p.afternoon
       ? "<li>午後問題 " + p.afternoon + "分</li>"
@@ -567,10 +609,11 @@
       : "";
     const summary =
       planMode === "exam"
-        ? "学習開始日から試験日までの全" + info.schedule.totalDays +
-          "日に、全カードを均等配分します。試験までは残り" + info.days + "日です。" + gap
+        ? "欠席日は学習日として数えず、完了済み" + info.schedule.completedBeforeToday +
+          "日と試験までの残り日数から全" + info.schedule.totalDays +
+          "学習日に再配分します。試験までは残り" + info.days + "日です。" + gap
         : "1日約" + info.schedule.timeTermsPerDay + "カード、全" +
-          info.schedule.totalDays + "学習日で完了する計画です。この日の知識学習は約" +
+          info.schedule.totalDays + "学習日で完了する計画です。欠席しても未完了の学習日は繰り越します。この日の知識学習は約" +
           knowledgeMinutes + "分です。" + gap;
     const warn =
       info.overload && planMode === "exam"
@@ -622,7 +665,7 @@
     const missionProgress = document.querySelector(".mission-progress");
     if (missionProgress) {
       const schedule = planSchedule();
-      const day = currentStudyDay ?? schedule.todayDay;
+      const day = currentStudyDay ?? schedule.currentDay;
       const terms = termsForStudyDay(day, schedule);
       const rated = terms.filter((t) => mastery[termKey(t)]).length;
       missionProgress.textContent = "この日の知識評価：" + rated + " / " + terms.length;
@@ -633,16 +676,20 @@
     const btn = document.getElementById("doneBtn");
     if (!btn) return;
     const schedule = planSchedule();
-    const day = currentStudyDay ?? schedule.todayDay;
-    const selectedDate = studyDateForDay(day);
-    const todayDone = doneDates.has(selectedDate);
+    const day = currentStudyDay ?? schedule.currentDay;
+    const selectedDate = studyDateForDay(day, schedule);
+    const todayDone = day < schedule.currentDay ||
+      (day === schedule.currentDay && doneDates.has(todayId()));
     const todayTerms = termsForStudyDay(day, schedule);
     const ratedCount = todayTerms.filter((t) => mastery[termKey(t)]).length;
     const canComplete = todayTerms.length === 0 || ratedCount === todayTerms.length;
-    btn.disabled = !canComplete && !todayDone;
+    const isCurrent = day === schedule.currentDay;
+    btn.disabled = !isCurrent || (!canComplete && !todayDone);
     btn.className = "done" + (todayDone ? " on" : "");
     btn.textContent = todayDone
       ? "✓ 完了済み"
+      : !isCurrent
+        ? "この日はまだ完了できません"
       : canComplete
         ? "学習完了"
         : "全カードを評価すると完了できます";
@@ -653,7 +700,7 @@
       (b) => (b.onclick = () => {
         studyMinutes = +b.dataset.minutes;
         try { localStorage.setItem(TIME_KEY, String(studyMinutes)); } catch {}
-        resetTodayPlan();
+        resetOpenStudyPlan();
         currentStudyDay = null;
         renderToday();
         renderAfternoon();
@@ -663,7 +710,7 @@
       (b) => (b.onclick = () => {
         planMode = b.dataset.mode;
         try { localStorage.setItem(MODE_KEY, planMode); } catch {}
-        resetTodayPlan();
+        resetOpenStudyPlan();
         currentStudyDay = null;
         renderToday();
       }),
@@ -673,7 +720,7 @@
       exam.onchange = () => {
         examDate = exam.value || loadExamDate();
         try { localStorage.setItem(EXAM_KEY, examDate); } catch {}
-        resetTodayPlan();
+        resetOpenStudyPlan();
         currentStudyDay = null;
         renderToday();
       };
@@ -681,10 +728,10 @@
     if (startDateEl)
       startDateEl.onchange = () => {
         const val = startDateEl.value;
-        if (/^\d{4}-\d{2}-\d{2}$/.test(val)) {
+        if (isValidIsoDate(val)) {
           try { localStorage.setItem(START_KEY, val); } catch {}
           START = loadStart();
-          resetTodayPlan();
+          resetOpenStudyPlan();
           currentStudyDay = null;
           renderToday();
         }
@@ -703,6 +750,7 @@
         const back = card.querySelector(".fc-back");
         const opening = back.hidden;
         back.hidden = !opening;
+        trigger.setAttribute("aria-expanded", String(opening));
         if (opening) {
           card.dataset.revealed = "1";
           lastRevealedKey = card.dataset.key;
@@ -724,13 +772,15 @@
     lastRevealedKey = null;
     const info = planInfo(),
       schedule = info.schedule;
-    if (currentStudyDay === null) currentStudyDay = schedule.todayDay;
+    if (currentStudyDay === null) currentStudyDay = schedule.currentDay;
     currentStudyDay = Math.max(1, Math.min(schedule.totalDays, currentStudyDay));
     const todayTerms = termsForStudyDay(currentStudyDay, schedule),
       ratedCount = todayTerms.filter((t) => mastery[termKey(t)]).length,
       canComplete = todayTerms.length === 0 || ratedCount === todayTerms.length,
-      selectedDate = studyDateForDay(currentStudyDay),
-      todayDone = doneDates.has(selectedDate);
+      selectedDate = studyDateForDay(currentStudyDay, schedule),
+      isCurrentDay = currentStudyDay === schedule.currentDay,
+      todayDone = currentStudyDay < schedule.currentDay ||
+        (isCurrentDay && doneDates.has(todayId()));
 
     const sourceDays = [...new Set(todayTerms.map((t) => t.sourceDay))];
     if (todayTerms[0]?.sourceDay) currentTheme = todayTerms[0].sourceDay;
@@ -822,8 +872,9 @@
       '<p><span class="calc-label">コツ：</span>' + esc(c.tip) + "</p></div></div></article>" +
       reviewBlock +
       '<button class="done ' + (todayDone ? "on" : "") +
-      '" id="doneBtn" ' + (!canComplete && !todayDone ? "disabled" : "") + ">" +
-      (todayDone ? "✓ 完了済み" : canComplete ? "学習完了" : "全カードを評価すると完了できます") +
+      '" id="doneBtn" ' + (!isCurrentDay || (!canComplete && !todayDone) ? "disabled" : "") + ">" +
+      (todayDone ? "✓ 完了済み" : !isCurrentDay ? "この日はまだ完了できません" :
+        canComplete ? "学習完了" : "全カードを評価すると完了できます") +
       "</button>";
 
     document.getElementById("prev").onclick = () => move(-1);
@@ -842,7 +893,7 @@
   function move(n) {
     const schedule = planSchedule();
     currentStudyDay = Math.max(1, Math.min(schedule.totalDays,
-      (currentStudyDay ?? schedule.todayDay) + n));
+      (currentStudyDay ?? schedule.currentDay) + n));
     renderToday();
     renderAfternoon();
     scrollTo({ top: 0, behavior: "smooth" });
@@ -850,14 +901,15 @@
 
   function toggleDone() {
     const schedule = planSchedule(),
-      day = currentStudyDay ?? schedule.todayDay,
-      selectedDate = studyDateForDay(day);
-    if (!doneDates.has(selectedDate)) {
+      day = currentStudyDay ?? schedule.currentDay,
+      today = todayId();
+    if (day !== schedule.currentDay) return;
+    if (!doneDates.has(today)) {
       const assigned = termsForStudyDay(day, schedule);
       if (assigned.some((t) => !mastery[termKey(t)])) return;
-      doneDates.add(selectedDate);
+      doneDates.add(today);
     } else {
-      doneDates.delete(selectedDate);
+      doneDates.delete(today);
     }
     saveDoneDates();
     markActivity();
@@ -957,9 +1009,13 @@
     document.querySelectorAll(".theme-row").forEach(
       (b) => (b.onclick = () => {
         currentTheme = +b.dataset.day;
-        const termIndex = ALL_TERMS.findIndex((t) => t.sourceDay === currentTheme);
         const schedule = planSchedule();
-        if (termIndex >= 0) currentStudyDay = studyDayForTermIndex(termIndex, schedule);
+        const matchingPlan = Object.entries(dailyPlans).find(([key, keys]) =>
+          /^p:\d+$/.test(key) && Array.isArray(keys) && keys.some((id) =>
+            id.startsWith(currentTheme + "::"),
+          ),
+        );
+        currentStudyDay = matchingPlan ? Number(matchingPlan[0].slice(2)) : schedule.currentDay;
         showTab("today");
         renderToday();
         renderAfternoon();

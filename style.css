@@ -621,8 +621,16 @@ tr:last-child td {
   display: none;
 }
 .fc-trigger {
+  width: 100%;
+  border: 0;
+  text-align: left;
+  font: inherit;
   cursor: pointer;
   user-select: none;
+}
+.fc-trigger:focus-visible {
+  outline: 3px solid #fbbf24;
+  outline-offset: -3px;
 }
 .fc-right {
   display: flex;

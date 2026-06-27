@@ -113,8 +113,8 @@ python3 -m http.server 8080
 | `ap96_minutes` | 15\|30\|45\|60 | 1日の学習時間（分） |
 | `ap96_exam_date` | "YYYY-MM-DD" | 受験予定日 |
 | `ap96_plan_mode` | "time"\|"exam" | 計画モード |
-| `ap96_daily_terms` | object | `"YYYY-MM-DD"` → termKey[] の日別プラン |
-| `ap96_plan_version` | string | プランバージョン（現在 "balanced-v3"） |
+| `ap96_daily_terms` | object | `"p:学習日番号"` → termKey[] の固定済み日別プラン |
+| `ap96_plan_version` | string | プランバージョン（現在 "queue-v4"） |
 | `ap96_last_activity` | "YYYY-MM-DD" | 最終学習日 |
 | `ap96_onboarding_complete` | "1" | 初回画面表示済みフラグ |
 | `ap96_start_date` | "YYYY-MM-DD" | 学習開始日（省略時 2026-06-24） |
@@ -127,7 +127,8 @@ python3 -m http.server 8080
 | version | 内容 |
 |---|---|
 | `1` | 旧形式。`done`（number[]）と `review`（number[]）を持つ。import 時に mastery のみ復元、done/review は捨て。 |
-| `2` | 現行形式。`doneDates`（string[]）と `masteryAt`（object）を持つ。 |
+| `2` | 旧形式。`doneDates`（string[]）と `masteryAt`（object）を持つ。 |
+| `3` | 現行形式。学習日番号単位の固定カード割当を持つ。 |
 
 ## 既知の課題（TODO）
 
