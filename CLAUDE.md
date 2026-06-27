@@ -107,26 +107,31 @@ python3 -m http.server 8080
 
 | キー | 型 | 内容 |
 |---|---|---|
-| `ap96_done` | number[] | 完了済み Day 番号の配列 |
-| `ap96_review` | number[] | 要復習 Day 番号の配列 |
-| `ap96_mastery` | object | `"day::term"` → `"known"\|"unsure"\|"unknown"` |
+| `ap96_done_dates` | string[] | 学習完了した日付の配列（"YYYY-MM-DD"[]）|
+| `ap96_mastery` | object | `"sourceDay::term"` → `"known"\|"unsure"\|"unknown"` |
+| `ap96_mastery_at` | object | `"sourceDay::term"` → 最終評価日 "YYYY-MM-DD" |
 | `ap96_minutes` | 15\|30\|45\|60 | 1日の学習時間（分） |
 | `ap96_exam_date` | "YYYY-MM-DD" | 受験予定日 |
 | `ap96_plan_mode` | "time"\|"exam" | 計画モード |
 | `ap96_daily_terms` | object | `"YYYY-MM-DD"` → termKey[] の日別プラン |
-| `ap96_plan_version` | string | プランバージョン（現在 "balanced-v2"） |
+| `ap96_plan_version` | string | プランバージョン（現在 "balanced-v3"） |
 | `ap96_last_activity` | "YYYY-MM-DD" | 最終学習日 |
 | `ap96_onboarding_complete` | "1" | 初回画面表示済みフラグ |
 | `ap96_start_date` | "YYYY-MM-DD" | 学習開始日（省略時 2026-06-24） |
 
+> **廃止キー**（旧バージョン残存分。読み込まず、import 時に削除される）
+> `ap96_done`（テーマ番号配列）、`ap96_review`（テーマ番号配列）
+
+## エクスポート JSON バージョン
+
+| version | 内容 |
+|---|---|
+| `1` | 旧形式。`done`（number[]）と `review`（number[]）を持つ。import 時に mastery のみ復元、done/review は捨て。 |
+| `2` | 現行形式。`doneDates`（string[]）と `masteryAt`（object）を持つ。 |
+
 ## 既知の課題（TODO）
 
-1. **official カードの解説が劣悪** — `d` フィールドがテンプレ文言、`example` も使い回し
-   - 4497件を一括修正予定
-   - 作業手順: `scripts/extract_terms.py` → 修正 → `scripts/patch_terms.py`
-
-2. **開始日が固定値** — `app.js` の `const START=new Date(2026,5,24)` がハードコード
-   - `ap96_start_date` localStorage キーを追加して設定UIから変更できるようにする
+- 特になし（official カード4497件改訂済み・全体改修完了）
 
 ## データ操作スクリプト
 
