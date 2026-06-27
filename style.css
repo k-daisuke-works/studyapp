@@ -860,6 +860,11 @@ tr:last-child td {
   color: #64748b;
   margin-bottom: 10px;
 }
+.search-limit {
+  margin: -2px 0 12px;
+  color: #64748b;
+  font-size: 12px;
+}
 .official-row {
   padding: 12px;
   border: 1px solid #dbe3ec;

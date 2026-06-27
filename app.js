@@ -646,16 +646,23 @@
     document.querySelectorAll('.rate[data-key="' + CSS.escape(key) + '"]').forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.rate === rate);
     });
-    const card = document.querySelector('.flashcard[data-key="' + CSS.escape(key) + '"]');
-    if (card) {
-      const right = card.querySelector(".fc-right");
+    const matchingCards = [...document.querySelectorAll(
+      '.flashcard[data-key="' + CSS.escape(key) + '"]',
+    )];
+    for (const matchingCard of matchingCards) {
+      const right = matchingCard.querySelector(".fc-right");
       let dot = right?.querySelector(".fc-dot");
       if (!dot && right) {
         dot = document.createElement("span");
         right.prepend(dot);
       }
       if (dot) dot.className = "fc-dot fc-dot-" + rate;
-      const allCards = [...document.querySelectorAll(".flashcard")];
+    }
+    const card = matchingCards.find((item) => item.closest(".panel")?.classList.contains("active")) ||
+      matchingCards[0];
+    if (card) {
+      const panel = card.closest(".panel"),
+        allCards = [...(panel || document).querySelectorAll(".flashcard")];
       const idx = allCards.indexOf(card);
       const next = allCards.slice(idx + 1).find((c) => !c.dataset.revealed);
       if (next) next.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -693,6 +700,33 @@
       : canComplete
         ? "学習完了"
         : "全カードを評価すると完了できます";
+  }
+
+  function bindFlashcardControls(root) {
+    if (!root) return;
+    root.querySelectorAll(".fc-trigger").forEach(
+      (trigger) => (trigger.onclick = () => {
+        const card = trigger.closest(".flashcard");
+        const back = card.querySelector(".fc-back");
+        const opening = back.hidden;
+        back.hidden = !opening;
+        trigger.setAttribute("aria-expanded", String(opening));
+        if (opening) {
+          card.dataset.revealed = "1";
+          lastRevealedKey = card.dataset.key;
+        } else {
+          delete card.dataset.revealed;
+          if (lastRevealedKey === card.dataset.key) lastRevealedKey = null;
+        }
+      }),
+    );
+    root.querySelectorAll(".rate").forEach(
+      (button) => (button.onclick = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onRate(button.dataset.key, button.dataset.rate);
+      }),
+    );
   }
 
   function bindStudyControls() {
@@ -744,28 +778,7 @@
       const file = importFile.files?.[0];
       if (file) importStudyData(file);
     };
-    document.querySelectorAll(".fc-trigger").forEach(
-      (trigger) => (trigger.onclick = () => {
-        const card = trigger.closest(".flashcard");
-        const back = card.querySelector(".fc-back");
-        const opening = back.hidden;
-        back.hidden = !opening;
-        trigger.setAttribute("aria-expanded", String(opening));
-        if (opening) {
-          card.dataset.revealed = "1";
-          lastRevealedKey = card.dataset.key;
-        } else {
-          lastRevealedKey = null;
-        }
-      }),
-    );
-    document.querySelectorAll(".rate").forEach(
-      (b) => (b.onclick = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        onRate(b.dataset.key, b.dataset.rate);
-      }),
-    );
+    bindFlashcardControls(document.getElementById("today"));
   }
 
   function renderToday() {
@@ -1072,41 +1085,60 @@
 
   function renderOfficial() {
     const q = officialQuery.trim().toLowerCase(),
-      covered = OFFICIAL.filter((x) => x.covered).length;
-    const matches = q
+      covered = OFFICIAL.filter((x) => x.covered).length,
+      normalizeTerm = (value) => String(value || "").replace(/[\s　]+/g, "").toLowerCase(),
+      cardsByName = new Map();
+    for (const term of ALL_TERMS) {
+      const key = normalizeTerm(term.w);
+      if (!cardsByName.has(key)) cardsByName.set(key, []);
+      cardsByName.get(key).push(term);
+    }
+    const glossaryMatches = q
       ? OFFICIAL.filter((x) =>
           [x.term, x.middle, x.topic, x.subsection].join(" ").toLowerCase().includes(q),
-        ).slice(0, 150)
+        )
       : [];
-    const rows = matches.length
-      ? matches
-          .map(
-            (x) =>
-              '<article class="official-row"><strong>' + esc(x.term) + "</strong>" +
-              '<div class="official-path">' +
-              esc([x.middle, x.topic, x.subsection].filter(Boolean).join(" ▸ ")) +
-              "</div>" +
-              '<span class="coverage-badge ' + (x.covered ? "on" : "") + '">' +
-              (x.covered ? "詳説カードまたは説明内に収録" : "公式細目索引に収録") +
-              "</span></article>",
-          )
-          .join("")
+    const uniqueNames = new Set(),
+      matchingCards = [];
+    for (const item of glossaryMatches) {
+      const key = normalizeTerm(item.term);
+      if (uniqueNames.has(key)) continue;
+      uniqueNames.add(key);
+      const candidates = cardsByName.get(key) || [];
+      const card = candidates.find((term) => term.sourceType === "official") || candidates[0];
+      if (card) matchingCards.push(card);
+    }
+    matchingCards.sort((a, b) => {
+      const aName = normalizeTerm(a.w), bName = normalizeTerm(b.w), query = normalizeTerm(q);
+      return Number(bName === query) - Number(aName === query) ||
+        Number(bName.startsWith(query)) - Number(aName.startsWith(query));
+    });
+    const visibleCards = matchingCards.slice(0, 80),
+      results = visibleCards.length
+      ? '<article class="card"><div class="card-pad"><h3 class="section-title">検索カード（' +
+        matchingCards.length + "件）</h3>" +
+        (matchingCards.length > visibleCards.length
+          ? '<p class="search-limit">先頭80件を表示しています。キーワードを追加すると絞り込めます。</p>'
+          : "") +
+        visibleCards.map((term) => termHtml(term, true)).join("") + "</div></article>"
       : q
-        ? '<div class="empty">該当する公式用語はありません。</div>'
-        : '<div class="empty">用語を入力してください。例：trap要求、HTTP、XML、Docker、OAuth</div>';
-    document.getElementById("official").innerHTML =
+        ? '<div class="empty">該当するカードはありません。</div>'
+        : '<div class="empty">用語を入力してください。例：HTTP、XML、Docker、OAuth</div>';
+    const officialPanel = document.getElementById("official");
+    officialPanel.innerHTML =
       '<section class="glossary-head"><h2>IPA公式細目辞典</h2>' +
-      "<p>シラバスVer.7.2の「用語例」を検索します。細かい選択肢の見覚えを作るための索引です。</p></section>" +
+      "<p>シラバスVer.7.2の公式名称から、解説カードを検索します。答えを開く前に意味を説明してみてください。</p></section>" +
       '<input class="glossary-search" id="officialSearch" value="' + esc(officialQuery) +
-      '" placeholder="公式用語を検索">' +
+      '" aria-label="公式用語を検索" placeholder="公式用語を検索">' +
       '<div class="glossary-stat">公式名称 ' + OFFICIAL.length +
       "件／詳説・説明内で確認できる名称 " + covered + "件" +
-      (q ? "／検索結果 " + matches.length + "件" : "") + "</div>" +
-      rows;
+      (q ? "／カード検索結果 " + matchingCards.length + "件" : "") + "</div>" +
+      results;
     document.getElementById("officialSearch").oninput = (e) => {
       officialQuery = e.target.value;
       debouncedRenderOfficial();
     };
+    bindFlashcardControls(officialPanel);
   }
 
   function renderProgress() {
