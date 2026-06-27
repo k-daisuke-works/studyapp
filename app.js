@@ -72,6 +72,7 @@
     planMode = loadPlanMode(),
     lastActivity = loadText(LAST_ACTIVITY_KEY),
     currentTheme = 1,
+    lastRevealedKey = null,
     themeFilter = "all",
     themeQuery = "",
     officialQuery = "";
@@ -677,6 +678,7 @@
         card.querySelector(".fc-back").hidden = false;
         card.dataset.revealed = "1";
         btn.hidden = true;
+        lastRevealedKey = card.dataset.key;
       }),
     );
     document.querySelectorAll(".rate").forEach(
@@ -689,6 +691,7 @@
   }
 
   function renderToday() {
+    lastRevealedKey = null;
     const info = planInfo(),
       todayTerms = plannedTermsForToday(info.targetCount),
       ratedCount = todayTerms.filter((t) => mastery[termKey(t)]).length,
@@ -1056,6 +1059,23 @@
   }
 
   document.querySelectorAll(".tab").forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
+
+  document.addEventListener("keydown", (e) => {
+    if (!lastRevealedKey) return;
+    if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.tagName === "SELECT") return;
+    const rateMap = {
+      "1": "known", k: "known",
+      "2": "unsure", u: "unsure",
+      "3": "unknown", x: "unknown",
+    };
+    const rate = rateMap[e.key];
+    if (rate) {
+      e.preventDefault();
+      onRate(lastRevealedKey, rate);
+      lastRevealedKey = null;
+    }
+  });
+
   renderToday();
   renderAll();
   renderCalc();
