@@ -352,7 +352,7 @@
       '<div class="fc-front">' +
       '<div class="term-name"><span>' + esc(t.w) + "</span>" + stateDot + "</div>" +
       ab +
-      '<button class="fc-reveal">確認する</button>' +
+      '<button class="fc-reveal">答えを見る</button>' +
       "</div>" +
       '<div class="fc-back" hidden>' +
       official +
