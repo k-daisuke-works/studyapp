@@ -258,6 +258,9 @@
     cleanOldPlans();
     dailyPlans[id] = selected.map(termKey);
     saveObject(DAY_PLAN_KEY, dailyPlans);
+    // Auto-initialize currentTheme to primary theme of today's plan
+    const firstSourceDay = selected[0]?.sourceDay;
+    if (firstSourceDay) currentTheme = firstSourceDay;
     return selected;
   }
 
