@@ -71,6 +71,7 @@
     examDate = loadExamDate(),
     planMode = loadPlanMode(),
     lastActivity = loadText(LAST_ACTIVITY_KEY),
+    currentStudyDay = null,
     currentTheme = 1,
     lastRevealedKey = null,
     themeFilter = "all",
@@ -160,6 +161,52 @@
   const NORMALIZED_CARD_MINUTES =
     ALL_TERMS.reduce((sum, t) => sum + termMinutes(t), 0) / ALL_TERMS.length;
 
+  function planSchedule() {
+    const timeTermsPerDay = Math.max(
+      1,
+      Math.floor(knowledgeBudget() / NORMALIZED_CARD_MINUTES),
+    );
+    let totalDays;
+    if (planMode === "exam") {
+      const exam = localMidnight(examDate),
+        start = new Date(START.getFullYear(), START.getMonth(), START.getDate());
+      totalDays = Math.max(1, Math.floor((exam - start) / 86400000) + 1);
+    } else {
+      totalDays = Math.max(1, Math.ceil(ALL_TERMS.length / timeTermsPerDay));
+    }
+    const today = localMidnight(todayId()),
+      start = new Date(START.getFullYear(), START.getMonth(), START.getDate()),
+      elapsed = Math.floor((today - start) / 86400000) + 1,
+      todayDay = Math.max(1, Math.min(totalDays, elapsed));
+    return { totalDays, todayDay, timeTermsPerDay };
+  }
+
+  function termsForStudyDay(day, schedule = planSchedule()) {
+    const safeDay = Math.max(1, Math.min(schedule.totalDays, day));
+    let start, end;
+    if (planMode === "exam") {
+      start = Math.floor(((safeDay - 1) * ALL_TERMS.length) / schedule.totalDays);
+      end = Math.floor((safeDay * ALL_TERMS.length) / schedule.totalDays);
+    } else {
+      start = (safeDay - 1) * schedule.timeTermsPerDay;
+      end = Math.min(ALL_TERMS.length, start + schedule.timeTermsPerDay);
+    }
+    return ALL_TERMS.slice(start, end);
+  }
+
+  function studyDateForDay(day) {
+    const d = new Date(START.getFullYear(), START.getMonth(), START.getDate());
+    d.setDate(d.getDate() + day - 1);
+    return isoDate(d);
+  }
+
+  function studyDayForTermIndex(index, schedule = planSchedule()) {
+    return planMode === "exam"
+      ? Math.max(1, Math.min(schedule.totalDays,
+          Math.ceil(((index + 1) * schedule.totalDays) / ALL_TERMS.length)))
+      : Math.floor(index / schedule.timeTermsPerDay) + 1;
+  }
+
   function remainingDays() {
     const today = new Date(),
       base = new Date(today.getFullYear(), today.getMonth(), today.getDate()),
@@ -221,48 +268,19 @@
       missedDays = daysSinceActivity(),
       requiredMinutes = Math.max(0, Math.ceil(remainingKnowledgeMinutes / days)),
       capMinutes = knowledgeBudget(),
-      timeCount = unseen
-        ? Math.max(1, Math.floor(capMinutes / NORMALIZED_CARD_MINUTES))
-        : 0,
-      targetCount =
-        planMode === "exam"
-          ? Math.min(unseen, Math.ceil(unseen / days))
-          : Math.min(unseen, timeCount),
+      schedule = planSchedule(),
+      timeCount = schedule.timeTermsPerDay,
+      targetCount = termsForStudyDay(schedule.todayDay, schedule).length,
       plannedKnowledgeMinutes = targetCount * NORMALIZED_CARD_MINUTES,
       p = profile(),
       estimated = Math.ceil(plannedKnowledgeMinutes + p.review * 1.5 + 4 + p.past + p.afternoon),
-      finishDays = timeCount ? Math.ceil(unseen / timeCount) : 0;
+      finishDays = schedule.totalDays;
     return {
       unseen, days, missedDays, remainingKnowledgeMinutes, requiredMinutes,
-      capMinutes, targetCount, plannedKnowledgeMinutes, estimated, finishDays,
+      capMinutes, targetCount, plannedKnowledgeMinutes, estimated, finishDays, schedule,
       shortage: requiredMinutes > capMinutes,
       overload: requiredMinutes > 90,
     };
-  }
-
-  function cleanOldPlans() {
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - 30);
-    for (const key of Object.keys(dailyPlans)) {
-      if (/^\d{4}-\d{2}-\d{2}$/.test(key) && new Date(key) < cutoff)
-        delete dailyPlans[key];
-    }
-  }
-
-  function plannedTermsForToday(targetCount) {
-    const valid = new Map(ALL_TERMS.map((t) => [termKey(t), t]));
-    const id = todayId();
-    const saved = (dailyPlans[id] || []).filter((k) => valid.has(k));
-    if (saved.length) return saved.map((k) => valid.get(k));
-    const unseen = ALL_TERMS.filter((t) => !mastery[termKey(t)]);
-    const selected = unseen.slice(0, Math.max(0, targetCount));
-    cleanOldPlans();
-    dailyPlans[id] = selected.map(termKey);
-    saveObject(DAY_PLAN_KEY, dailyPlans);
-    // Auto-initialize currentTheme to primary theme of today's plan
-    const firstSourceDay = selected[0]?.sourceDay;
-    if (firstSourceDay) currentTheme = firstSourceDay;
-    return selected;
   }
 
   function resetTodayPlan() {
@@ -451,6 +469,7 @@
           planMode = loadPlanMode();
           lastActivity = loadText(LAST_ACTIVITY_KEY);
           START = loadStart();
+          currentStudyDay = null;
           currentTheme = 1;
           themeFilter = "all";
           themeQuery = "";
@@ -507,7 +526,7 @@
     };
   }
 
-  function timeBoxHtml(todayTerms, info) {
+  function timeBoxHtml(todayTerms, info, selectedDay) {
     const p = profile(),
       rated = todayTerms.filter((t) => mastery[termKey(t)]).length,
       knowledgeMinutes = Math.ceil(todayTerms.length * NORMALIZED_CARD_MINUTES),
@@ -548,10 +567,11 @@
       : "";
     const summary =
       planMode === "exam"
-        ? "試験まで" + info.days + "日。未学習の残り" + info.unseen +
-          "カードを毎日約" + info.targetCount + "カード（差は最大1枚）に再平均化します。" + gap
-        : "毎日" + info.targetCount + "カードに固定します。未評価分は消さず、次回の先頭へ順番に繰り越します。知識学習は約" +
-          knowledgeMinutes + "分、残り約" + info.finishDays + "学習日です。" + gap;
+        ? "学習開始日から試験日までの全" + info.schedule.totalDays +
+          "日に、全カードを均等配分します。試験までは残り" + info.days + "日です。" + gap
+        : "1日約" + info.schedule.timeTermsPerDay + "カード、全" +
+          info.schedule.totalDays + "学習日で完了する計画です。この日の知識学習は約" +
+          knowledgeMinutes + "分です。" + gap;
     const warn =
       info.overload && planMode === "exam"
         ? " 1日の必要量が非常に多いため、試験日か学習時間を見直してください。"
@@ -561,12 +581,12 @@
       '<span class="setting-label">配分方法</span><div class="mode-options">' + modes + "</div>" +
       activeSetting + startSetting +
       '<div class="plan-summary ' + (warn ? "plan-warning" : "") + '">' + summary + warn + "</div>" +
-      '<div class="mission"><b>今日の合格ミッション（推定' + missionMinutes + "分）</b><ul>" +
+      '<div class="mission"><b>学習日 ' + selectedDay + " の合格ミッション（推定" + missionMinutes + "分）</b><ul>" +
       "<li>新規知識 " + todayTerms.length + "カードを思い出して3段階評価</li>" +
       "<li>苦手復習 最大" + p.review + "項目</li>" +
       "<li>計算問題 1問</li><li>午前過去問 " + p.past + "問</li>" +
       afternoon +
-      '</ul><div class="mission-progress">今日の知識評価：' + rated + " / " + todayTerms.length +
+      '</ul><div class="mission-progress">この日の知識評価：' + rated + " / " + todayTerms.length +
       '</div></div><div class="data-tools"><p>端末間の移行：現在の学習記録をJSONファイルで持ち運べます。</p>' +
       '<div class="data-buttons"><button class="data-button" id="exportData">JSONを書き出す</button>' +
       '<button class="data-button" id="importData">JSONから復元</button></div>' +
@@ -601,20 +621,22 @@
     renderProgress();
     const missionProgress = document.querySelector(".mission-progress");
     if (missionProgress) {
-      const inf = planInfo();
-      const terms = plannedTermsForToday(inf.targetCount);
+      const schedule = planSchedule();
+      const day = currentStudyDay ?? schedule.todayDay;
+      const terms = termsForStudyDay(day, schedule);
       const rated = terms.filter((t) => mastery[termKey(t)]).length;
-      missionProgress.textContent = "今日の知識評価：" + rated + " / " + terms.length;
+      missionProgress.textContent = "この日の知識評価：" + rated + " / " + terms.length;
     }
   }
 
   function updateDoneButton() {
     const btn = document.getElementById("doneBtn");
     if (!btn) return;
-    const today = todayId();
-    const todayDone = doneDates.has(today);
-    const info = planInfo();
-    const todayTerms = plannedTermsForToday(info.targetCount);
+    const schedule = planSchedule();
+    const day = currentStudyDay ?? schedule.todayDay;
+    const selectedDate = studyDateForDay(day);
+    const todayDone = doneDates.has(selectedDate);
+    const todayTerms = termsForStudyDay(day, schedule);
     const ratedCount = todayTerms.filter((t) => mastery[termKey(t)]).length;
     const canComplete = todayTerms.length === 0 || ratedCount === todayTerms.length;
     btn.disabled = !canComplete && !todayDone;
@@ -632,6 +654,7 @@
         studyMinutes = +b.dataset.minutes;
         try { localStorage.setItem(TIME_KEY, String(studyMinutes)); } catch {}
         resetTodayPlan();
+        currentStudyDay = null;
         renderToday();
         renderAfternoon();
       }),
@@ -641,6 +664,7 @@
         planMode = b.dataset.mode;
         try { localStorage.setItem(MODE_KEY, planMode); } catch {}
         resetTodayPlan();
+        currentStudyDay = null;
         renderToday();
       }),
     );
@@ -650,6 +674,7 @@
         examDate = exam.value || loadExamDate();
         try { localStorage.setItem(EXAM_KEY, examDate); } catch {}
         resetTodayPlan();
+        currentStudyDay = null;
         renderToday();
       };
     const startDateEl = document.getElementById("startDate");
@@ -660,6 +685,7 @@
           try { localStorage.setItem(START_KEY, val); } catch {}
           START = loadStart();
           resetTodayPlan();
+          currentStudyDay = null;
           renderToday();
         }
       };
@@ -697,12 +723,17 @@
   function renderToday() {
     lastRevealedKey = null;
     const info = planInfo(),
-      todayTerms = plannedTermsForToday(info.targetCount),
+      schedule = info.schedule;
+    if (currentStudyDay === null) currentStudyDay = schedule.todayDay;
+    currentStudyDay = Math.max(1, Math.min(schedule.totalDays, currentStudyDay));
+    const todayTerms = termsForStudyDay(currentStudyDay, schedule),
       ratedCount = todayTerms.filter((t) => mastery[termKey(t)]).length,
       canComplete = todayTerms.length === 0 || ratedCount === todayTerms.length,
-      todayDone = doneDates.has(todayId());
+      selectedDate = studyDateForDay(currentStudyDay),
+      todayDone = doneDates.has(selectedDate);
 
     const sourceDays = [...new Set(todayTerms.map((t) => t.sourceDay))];
+    if (todayTerms[0]?.sourceDay) currentTheme = todayTerms[0].sourceDay;
     let themeHeader, practiceLinks, tables;
     if (sourceDays.length === 1) {
       const d = DAYS[sourceDays[0] - 1];
@@ -732,7 +763,7 @@
     } else {
       themeHeader =
         '<div class="crumb">複数テーマ（' + sourceDays.length + "テーマ）</div>" +
-        "<h2>今日の学習カード</h2>" +
+        "<h2>この日の学習カード</h2>" +
         '<p class="intro">' +
         sourceDays.map((n) => DAYS[n - 1]?.subName).filter(Boolean).join("・") +
         "</p>";
@@ -763,18 +794,18 @@
 
     document.getElementById("today").innerHTML =
       '<div class="day-nav">' +
-      '<button class="nav-btn" id="prev" ' + (currentTheme === 1 ? "disabled" : "") +
-      ' aria-label="前のテーマ">‹</button>' +
-      '<div class="day-center"><strong>テーマ ' + currentTheme + " / 96</strong>" +
-      "<small>" + esc(DAYS[currentTheme - 1]?.subName || "") + "</small></div>" +
-      '<button class="nav-btn" id="next" ' + (currentTheme === 96 ? "disabled" : "") +
-      ' aria-label="次のテーマ">›</button></div>' +
-      timeBoxHtml(todayTerms, info) +
+      '<button class="nav-btn" id="prev" ' + (currentStudyDay === 1 ? "disabled" : "") +
+      ' aria-label="前の学習日">‹</button>' +
+      '<div class="day-center"><strong>学習日 ' + currentStudyDay + " / " + schedule.totalDays + "</strong>" +
+      "<small>" + esc(selectedDate) + "・" + todayTerms.length + "カード</small></div>" +
+      '<button class="nav-btn" id="next" ' + (currentStudyDay === schedule.totalDays ? "disabled" : "") +
+      ' aria-label="次の学習日">›</button></div>' +
+      timeBoxHtml(todayTerms, info, currentStudyDay) +
       '<article class="card"><div class="card-pad">' +
       themeHeader +
       '<div class="balance-note">詳説カードとIPA公式細目カードを含む全' + ALL_TERMS.length +
-      '項目から、確保時間または試験日で今日の表示数を自動計算します。</div>' +
-      '<h3 class="section-title">📚 今日の知識（' + todayTerms.length + "項目）" + streakBadge +
+      '項目から、確保時間または試験日で1日ごとの表示数を自動計算します。</div>' +
+      '<h3 class="section-title">📚 この日の知識（' + todayTerms.length + "項目）" + streakBadge +
       '<small class="kb-hint">開封後 1=○ 2=△ 3=×</small></h3>' +
       (todayTerms.length
         ? todayTerms.map((t) => termHtml(t, sourceDays.length > 1)).join("")
@@ -809,21 +840,24 @@
   }
 
   function move(n) {
-    currentTheme = Math.max(1, Math.min(96, currentTheme + n));
+    const schedule = planSchedule();
+    currentStudyDay = Math.max(1, Math.min(schedule.totalDays,
+      (currentStudyDay ?? schedule.todayDay) + n));
     renderToday();
     renderAfternoon();
     scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function toggleDone() {
-    const today = todayId();
-    if (!doneDates.has(today)) {
-      const info = planInfo();
-      const assigned = plannedTermsForToday(info.targetCount);
+    const schedule = planSchedule(),
+      day = currentStudyDay ?? schedule.todayDay,
+      selectedDate = studyDateForDay(day);
+    if (!doneDates.has(selectedDate)) {
+      const assigned = termsForStudyDay(day, schedule);
       if (assigned.some((t) => !mastery[termKey(t)])) return;
-      doneDates.add(today);
+      doneDates.add(selectedDate);
     } else {
-      doneDates.delete(today);
+      doneDates.delete(selectedDate);
     }
     saveDoneDates();
     markActivity();
@@ -923,6 +957,9 @@
     document.querySelectorAll(".theme-row").forEach(
       (b) => (b.onclick = () => {
         currentTheme = +b.dataset.day;
+        const termIndex = ALL_TERMS.findIndex((t) => t.sourceDay === currentTheme);
+        const schedule = planSchedule();
+        if (termIndex >= 0) currentStudyDay = studyDayForTermIndex(termIndex, schedule);
         showTab("today");
         renderToday();
         renderAfternoon();
