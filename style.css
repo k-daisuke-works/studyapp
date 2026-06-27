@@ -620,22 +620,25 @@ tr:last-child td {
 .fc-back[hidden] {
   display: none;
 }
-.fc-reveal {
-  border: 0;
-  margin: 10px 12px 12px;
-  border-radius: 9px;
-  padding: 10px;
-  background: #1e3a5f;
-  color: #fff;
-  font-weight: 800;
+.fc-trigger {
   cursor: pointer;
-  font-size: 13px;
+  user-select: none;
 }
-.fc-reveal[hidden] {
-  display: none;
+.fc-right {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
 }
-.fc-reveal:hover {
-  background: #2d5490;
+.fc-right:after {
+  content: "答えを見る";
+  font-size: 11px;
+  font-weight: 600;
+  color: #bae6fd;
+  white-space: nowrap;
+}
+.flashcard[data-revealed] .fc-right:after {
+  content: "閉じる";
 }
 .fc-def {
   margin: 0 0 8px;

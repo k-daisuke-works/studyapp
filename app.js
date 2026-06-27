@@ -344,15 +344,13 @@
           label + "</button>",
       )
       .join("");
-    const stateDot = state
-      ? '<span class="fc-dot fc-dot-' + state + '"></span>'
-      : "";
     return (
       '<div class="flashcard" data-key="' + esc(key) + '">' +
       '<div class="fc-front">' +
-      '<div class="term-name"><span>' + esc(t.w) + "</span>" + stateDot + "</div>" +
+      '<div class="term-name fc-trigger"><span>' + esc(t.w) + "</span>" +
+      '<span class="fc-right">' + (state ? '<span class="fc-dot fc-dot-' + state + '"></span>' : "") + "</span>" +
+      "</div>" +
       ab +
-      '<button class="fc-reveal">答えを見る</button>' +
       "</div>" +
       '<div class="fc-back" hidden>' +
       official +
@@ -587,12 +585,13 @@
     });
     const card = document.querySelector('.flashcard[data-key="' + CSS.escape(key) + '"]');
     if (card) {
-      let dot = card.querySelector(".fc-dot");
-      if (!dot) {
+      const right = card.querySelector(".fc-right");
+      let dot = right?.querySelector(".fc-dot");
+      if (!dot && right) {
         dot = document.createElement("span");
-        card.querySelector(".term-name").appendChild(dot);
+        right.prepend(dot);
       }
-      dot.className = "fc-dot fc-dot-" + rate;
+      if (dot) dot.className = "fc-dot fc-dot-" + rate;
       const allCards = [...document.querySelectorAll(".flashcard")];
       const idx = allCards.indexOf(card);
       const next = allCards.slice(idx + 1).find((c) => !c.dataset.revealed);
@@ -672,13 +671,18 @@
       const file = importFile.files?.[0];
       if (file) importStudyData(file);
     };
-    document.querySelectorAll(".fc-reveal").forEach(
-      (btn) => (btn.onclick = () => {
-        const card = btn.closest(".flashcard");
-        card.querySelector(".fc-back").hidden = false;
-        card.dataset.revealed = "1";
-        btn.hidden = true;
-        lastRevealedKey = card.dataset.key;
+    document.querySelectorAll(".fc-trigger").forEach(
+      (trigger) => (trigger.onclick = () => {
+        const card = trigger.closest(".flashcard");
+        const back = card.querySelector(".fc-back");
+        const opening = back.hidden;
+        back.hidden = !opening;
+        if (opening) {
+          card.dataset.revealed = "1";
+          lastRevealedKey = card.dataset.key;
+        } else {
+          lastRevealedKey = null;
+        }
       }),
     );
     document.querySelectorAll(".rate").forEach(
