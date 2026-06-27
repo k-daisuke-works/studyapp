@@ -271,15 +271,20 @@
     return terms.length > 0 && terms.every((t) => mastery[termKey(t)] === "known");
   }
 
+  function localMidnight(isoStr) {
+    const [y, m, d] = isoStr.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  }
+
   function dueReviews(limit) {
-    const today = new Date(todayId());
+    const today = localMidnight(todayId());
     return ALL_TERMS
       .filter((t) => {
         const state = mastery[termKey(t)];
         if (!["unsure", "unknown"].includes(state)) return false;
         const lastDate = masteryAt[termKey(t)];
         if (!lastDate) return true;
-        const days = Math.floor((today - new Date(lastDate)) / 86400000);
+        const days = Math.floor((today - localMidnight(lastDate)) / 86400000);
         return state === "unknown" ? days >= 1 : days >= 3;
       })
       .sort((a, b) =>
@@ -292,7 +297,8 @@
   function calcStreak() {
     const sorted = [...doneDates].sort().reverse();
     let streak = 0;
-    const d = new Date(todayId());
+    const now = new Date();
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     for (const date of sorted) {
       if (isoDate(d) === date) {
         streak++;
@@ -302,7 +308,7 @@
     return streak;
   }
 
-  function termHtml(t) {
+  function termHtml(t, showSource = false) {
     const key = termKey(t),
       state = mastery[key] || "";
     const ab =
@@ -317,7 +323,7 @@
         ? '<span class="official-card">IPA公式細目カード</span>'
         : "";
     const source =
-      t.sourceDay && t.sourceDay !== currentTheme
+      showSource && t.sourceDay
         ? '<small class="source">' +
           (t.sourceType === "official" ? "所属" : "補強") +
           ":「" + esc(t.sourceName) + "」</small>"
@@ -590,6 +596,13 @@
     }
     updateDoneButton();
     renderProgress();
+    const missionProgress = document.querySelector(".mission-progress");
+    if (missionProgress) {
+      const inf = planInfo();
+      const terms = plannedTermsForToday(inf.targetCount);
+      const rated = terms.filter((t) => mastery[termKey(t)]).length;
+      missionProgress.textContent = "今日の知識評価：" + rated + " / " + terms.length;
+    }
   }
 
   function updateDoneButton() {
@@ -731,7 +744,7 @@
         ? '<article class="card"><div class="card-pad"><h3>🔁 今日の苦手復習（' +
           reviews.length + '項目）</h3>' +
           '<p class="intro">「怪しい」「不明」にした過去の項目です。答えを開く前に説明してみてください。</p>' +
-          reviews.map(termHtml).join("") + "</div></article>"
+          reviews.map((t) => termHtml(t, true)).join("") + "</div></article>"
         : "";
 
     const streak = calcStreak();
@@ -753,7 +766,7 @@
       '項目から、確保時間または試験日で今日の表示数を自動計算します。</div>' +
       '<h3 class="section-title">📚 今日の知識（' + todayTerms.length + "項目）" + streakBadge + "</h3>" +
       (todayTerms.length
-        ? todayTerms.map(termHtml).join("")
+        ? todayTerms.map((t) => termHtml(t, sourceDays.length > 1)).join("")
         : '<div class="empty">新規知識はすべて評価済みです。苦手復習と過去問へ進みましょう。</div>') +
       tables + practiceLinks +
       "</div></article>" +
