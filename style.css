@@ -38,14 +38,16 @@ a {
   min-height: 100vh;
   overflow-x: hidden;
 }
-.hero {
-  padding: 26px 20px 18px;
-  color: #fff;
-  background: linear-gradient(135deg, #0f172a, #1e3a5f);
+.sticky-header {
   position: sticky;
   top: 0;
   z-index: 10;
   box-shadow: 0 3px 18px rgba(15, 23, 42, 0.2);
+}
+.hero {
+  padding: 26px 20px 18px;
+  color: #fff;
+  background: linear-gradient(135deg, #0f172a, #1e3a5f);
 }
 .hero h1 {
   font-size: 19px;
@@ -77,9 +79,6 @@ a {
   padding: 10px;
   background: #fff;
   border-bottom: 1px solid var(--line);
-  position: sticky;
-  top: 184px;
-  z-index: 9;
 }
 .tab {
   border: 0;
@@ -694,6 +693,12 @@ tr:last-child td {
   color: #cbd5e1;
   text-align: right;
 }
+.kb-hint {
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--muted);
+  margin-left: 8px;
+}
 .theme-tools {
   background: #fff;
   border: 1px solid var(--line);
@@ -877,7 +882,6 @@ tr:last-child td {
     padding-top: 18px;
   }
   .tabs {
-    top: 176px;
     grid-template-columns: repeat(2, 1fr);
   }
   .tab {
@@ -917,8 +921,7 @@ tr:last-child td {
   }
 }
 @media print {
-  .hero,
-  .tabs,
+  .sticky-header,
   .day-nav,
   .done,
   .reveal {

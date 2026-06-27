@@ -770,7 +770,8 @@
       themeHeader +
       '<div class="balance-note">詳説カードとIPA公式細目カードを含む全' + ALL_TERMS.length +
       '項目から、確保時間または試験日で今日の表示数を自動計算します。</div>' +
-      '<h3 class="section-title">📚 今日の知識（' + todayTerms.length + "項目）" + streakBadge + "</h3>" +
+      '<h3 class="section-title">📚 今日の知識（' + todayTerms.length + "項目）" + streakBadge +
+      '<small class="kb-hint">開封後 1=○ 2=△ 3=×</small></h3>' +
       (todayTerms.length
         ? todayTerms.map((t) => termHtml(t, sourceDays.length > 1)).join("")
         : '<div class="empty">新規知識はすべて評価済みです。苦手復習と過去問へ進みましょう。</div>') +

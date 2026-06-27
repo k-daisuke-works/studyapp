@@ -25,18 +25,20 @@
  <p class="loading-text">データを読み込み中…</p>
 </div>
 <div class="app" id="app" hidden>
- <header class="hero">
-  <h1>応用情報技術者試験｜96日学習ナビ</h1>
-  <div class="progress-row"><span id="progressText">カード 0件評価</span><strong id="progressPct">0%</strong></div>
-  <div class="progress"><i id="progressBar"></i></div>
- </header>
- <nav class="tabs" aria-label="画面切替">
+ <div class="sticky-header">
+  <header class="hero">
+   <h1>応用情報技術者試験｜96日学習ナビ</h1>
+   <div class="progress-row"><span id="progressText">カード 0件評価</span><strong id="progressPct">0%</strong></div>
+   <div class="progress"><i id="progressBar"></i></div>
+  </header>
+  <nav class="tabs" aria-label="画面切替">
   <button class="tab active" data-tab="today">今日の学習</button>
   <button class="tab" data-tab="all">全96テーマ</button>
   <button class="tab" data-tab="calc">計算公式集</button>
   <button class="tab" data-tab="afternoon">午後対策</button>
   <button class="tab" data-tab="official">公式細目</button>
  </nav>
+ </div>
  <main>
   <section class="panel active" id="today"></section>
   <section class="panel" id="all"></section>
