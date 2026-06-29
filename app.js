@@ -64,6 +64,47 @@
     return html + "</tbody></table>";
   }
 
+  // 全角パイプ｜区切りの行をHTMLテーブルに変換
+  function renderFwTable(lines) {
+    let isHead = true;
+    let html = '<table class="ex-table">';
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      const raw = line.split("｜"); // ｜ (U+FF5C)
+      const cells = raw.map((c) => c.trim()).filter((c, i, a) => !(i === 0 && c === "") && !(i === a.length - 1 && c === ""));
+      if (cells.length < 2) continue;
+      if (isHead) {
+        html += "<thead><tr>" + cells.map((c) => "<th>" + parseLinks(c) + "</th>").join("") + "</tr></thead><tbody>";
+        isHead = false;
+      } else {
+        html += "<tr>" + cells.map((c) => "<td>" + parseLinks(c) + "</td>").join("") + "</tr>";
+      }
+    }
+    return html + "</tbody></table>";
+  }
+
+  // 【これが】ブロックの本文を｜テーブルと<pre>に振り分け
+  function renderDiagramBody(lines) {
+    const segs = [];
+    let i = 0;
+    while (i < lines.length) {
+      if (lines[i].includes("｜")) {
+        const tl = [];
+        while (i < lines.length && lines[i].includes("｜")) tl.push(lines[i++]);
+        segs.push({ type: "fwtable", lines: tl });
+      } else {
+        const pl = [];
+        while (i < lines.length && !lines[i].includes("｜")) pl.push(lines[i++]);
+        const content = pl.join("\n").replace(/^\n+/, "").replace(/\n+$/, "");
+        if (content) segs.push({ type: "pre", content });
+      }
+    }
+    return segs.map((s) => s.type === "fwtable"
+      ? renderFwTable(s.lines)
+      : '<pre class="ex-code">' + parseLinks(s.content) + "</pre>"
+    ).join("");
+  }
+
   function parseExContent(text) {
     const lines = String(text ?? "").split("\n");
     const segments = [];
@@ -75,7 +116,7 @@
         while (i < lines.length && lines[i].trimStart().startsWith("|")) tableLines.push(lines[i++]);
         segments.push({ type: "table", lines: tableLines });
       } else if (lines[i].startsWith("【これが")) {
-        // コード図ブロック: 空行が来るまでを<pre>で包む
+        // 【これが】ブロック: 空行まで収集
         const diagramLines = [];
         while (i < lines.length && lines[i] !== "") diagramLines.push(lines[i++]);
         segments.push({ type: "diagram", lines: diagramLines });
@@ -89,7 +130,10 @@
     return segments.map((s) => {
       if (s.type === "text") return parseLinks(s.content);
       if (s.type === "table") return renderMdTable(s.lines);
-      return '<pre class="ex-code">' + parseLinks(s.lines.join("\n")) + "</pre>";
+      // diagram: 1行目をラベルとして分離、本文を｜テーブル/preに振り分け
+      const [header, ...body] = s.lines;
+      const label = '<div class="ex-diagram-label">' + parseLinks(header) + "</div>";
+      return label + renderDiagramBody(body);
     }).join("");
   }
 
