@@ -691,6 +691,26 @@ tr:last-child td {
   line-height: 1.75;
   white-space: pre-line;
 }
+.ex-table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 6px 0;
+  font-size: 12px;
+  white-space: normal;
+}
+.ex-table th,
+.ex-table td {
+  border: 1px solid #bfdbfe;
+  padding: 4px 8px;
+  text-align: left;
+}
+.ex-table th {
+  background: #dbeafe;
+  font-weight: 600;
+}
+.ex-table tr:nth-child(even) td {
+  background: #f8faff;
+}
 .term-ex b {
   color: #1d4ed8;
   font-size: 11px;

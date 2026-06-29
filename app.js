@@ -48,6 +48,41 @@
     return out;
   }
 
+  function renderMdTable(lines) {
+    let isHead = true;
+    let html = '<table class="ex-table">';
+    for (const line of lines) {
+      const cells = line.trim().split("|").slice(1, -1);
+      if (cells.every((c) => /^[\s\-:]+$/.test(c))) continue;
+      if (isHead) {
+        html += "<thead><tr>" + cells.map((c) => "<th>" + parseLinks(c.trim()) + "</th>").join("") + "</tr></thead><tbody>";
+        isHead = false;
+      } else {
+        html += "<tr>" + cells.map((c) => "<td>" + parseLinks(c.trim()) + "</td>").join("") + "</tr>";
+      }
+    }
+    return html + "</tbody></table>";
+  }
+
+  function parseExContent(text) {
+    const lines = String(text ?? "").split("\n");
+    const segments = [];
+    let i = 0;
+    while (i < lines.length) {
+      if (lines[i].trimStart().startsWith("|")) {
+        const tableLines = [];
+        while (i < lines.length && lines[i].trimStart().startsWith("|")) tableLines.push(lines[i++]);
+        segments.push({ type: "table", lines: tableLines });
+      } else {
+        const textLines = [];
+        while (i < lines.length && !lines[i].trimStart().startsWith("|")) textLines.push(lines[i++]);
+        const content = textLines.join("\n").replace(/^\n+/, "").replace(/\n+$/, "");
+        if (content) segments.push({ type: "text", content });
+      }
+    }
+    return segments.map((s) => s.type === "text" ? parseLinks(s.content) : renderMdTable(s.lines)).join("");
+  }
+
   const START_KEY = "ap96_start_date",
     DONE_DATES_KEY = "ap96_done_dates",
     TIME_KEY = "ap96_minutes",
@@ -418,7 +453,7 @@
       ? '<div class="term-easy"><b>やさしく言うと：</b>' + esc(t.easy) + "</div>"
       : "";
     const exSection = t.ex
-      ? '<div class="term-ex"><b>例示：</b>' + parseLinks(t.ex) + "</div>"
+      ? '<div class="term-ex"><b>例示：</b>' + parseExContent(t.ex) + "</div>"
       : "";
     const matomeSection = t.matome
       ? '<div class="term-matome"><b>まとめ：</b>' + esc(t.matome) + "</div>"
