@@ -73,6 +73,7 @@
     lastActivity = loadText(LAST_ACTIVITY_KEY),
     currentStudyDay = null,
     currentTheme = 1,
+    themeViewMode = null,
     lastRevealedKey = null,
     themeFilter = "all",
     themeQuery = "",
@@ -781,7 +782,40 @@
     bindFlashcardControls(document.getElementById("today"));
   }
 
+  function renderThemeAll(themeDay) {
+    lastRevealedKey = null;
+    const d = DAYS[themeDay - 1];
+    if (!d) return;
+    const terms = TERMS_BY_DAY.get(themeDay) || [];
+    const panel = document.getElementById("today");
+    panel.innerHTML =
+      '<button class="back-to-plan" id="backToPlan">← 学習プランに戻る</button>' +
+      '<article class="card"><div class="card-pad">' +
+      '<span class="badge" style="background:' + color(d.kei) + '">' + esc(d.kei) + "</span>" +
+      '<div class="crumb">' + esc(d.dai) + " ▸ 中分類" + d.chuNo + " " + esc(d.chuName) + "</div>" +
+      "<h2>" + esc(d.subName) + "</h2>" +
+      '<p class="intro">' + esc(d.intro) + "</p>" +
+      '<h3 class="section-title">📚 このテーマの全カード（' + terms.length + "項目）</h3>" +
+      (terms.length
+        ? terms.map((t) => termHtml(t, false)).join("")
+        : '<div class="empty">カードがありません。</div>') +
+      (d.tables.length
+        ? '<details class="reference"><summary>📋 参考表（' + d.tables.length + "個）</summary>" +
+          d.tables.map(tableHtml).join("") + "</details>"
+        : "") +
+      '<a class="practice" href="' + esc(d.url) + '" target="_blank" rel="noopener">過去問を解く ↗</a>' +
+      '<small class="url-note">' + esc(d.urlNote) + "</small>" +
+      "</div></article>";
+    document.getElementById("backToPlan").onclick = () => {
+      themeViewMode = null;
+      renderToday();
+    };
+    bindFlashcardControls(panel);
+    bindStudyControls();
+  }
+
   function renderToday() {
+    if (themeViewMode !== null) { renderThemeAll(themeViewMode); return; }
     lastRevealedKey = null;
     const info = planInfo(),
       schedule = info.schedule;
@@ -904,6 +938,7 @@
   }
 
   function move(n) {
+    themeViewMode = null;
     const schedule = planSchedule();
     currentStudyDay = Math.max(1, Math.min(schedule.totalDays,
       (currentStudyDay ?? schedule.currentDay) + n));
@@ -1022,16 +1057,9 @@
     document.querySelectorAll(".theme-row").forEach(
       (b) => (b.onclick = () => {
         currentTheme = +b.dataset.day;
-        const schedule = planSchedule();
-        const matchingPlan = Object.entries(dailyPlans).find(([key, keys]) =>
-          /^p:\d+$/.test(key) && Array.isArray(keys) && keys.some((id) =>
-            id.startsWith(currentTheme + "::"),
-          ),
-        );
-        currentStudyDay = matchingPlan ? Number(matchingPlan[0].slice(2)) : schedule.currentDay;
+        themeViewMode = currentTheme;
         showTab("today");
         renderToday();
-        renderAfternoon();
         scrollTo({ top: 0, behavior: "smooth" });
       }),
     );
