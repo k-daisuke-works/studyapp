@@ -28,7 +28,7 @@ python3 -m http.server 8080
 ```
 {
   days: Day[96],
-  allTerms: Term[5098],   // detail: 601件 + official: 4497件
+  allTerms: Term[5496],   // detail: 621件 + official: 4875件
   calc: Calc[20],
   afternoon: Afternoon[11],
   officialGlossary: OfficialGlossary[4641]
