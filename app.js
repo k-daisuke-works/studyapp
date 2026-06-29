@@ -1092,6 +1092,11 @@
       const key = normalizeTerm(term.w);
       if (!cardsByName.has(key)) cardsByName.set(key, []);
       cardsByName.get(key).push(term);
+      const baseKey = normalizeTerm(term.w.replace(/（[^）]*）/g, "").trim());
+      if (baseKey && baseKey !== key) {
+        if (!cardsByName.has(baseKey)) cardsByName.set(baseKey, []);
+        if (!cardsByName.get(baseKey).includes(term)) cardsByName.get(baseKey).push(term);
+      }
     }
     const glossaryMatches = q
       ? OFFICIAL.filter((x) =>
@@ -1128,16 +1133,18 @@
     officialPanel.innerHTML =
       '<section class="glossary-head"><h2>IPA公式細目辞典</h2>' +
       "<p>シラバスVer.7.2の公式名称から、解説カードを検索します。答えを開く前に意味を説明してみてください。</p></section>" +
-      '<input class="glossary-search" id="officialSearch" value="' + esc(officialQuery) +
-      '" aria-label="公式用語を検索" placeholder="公式用語を検索">' +
+      '<div class="glossary-search-row"><input class="glossary-search" id="officialSearch" value="' + esc(officialQuery) +
+      '" aria-label="公式用語を検索" placeholder="公式用語を検索"><button class="glossary-search-btn" id="officialSearchBtn">検索</button></div>' +
       '<div class="glossary-stat">公式名称 ' + OFFICIAL.length +
       "件／詳説・説明内で確認できる名称 " + covered + "件" +
       (q ? "／カード検索結果 " + matchingCards.length + "件" : "") + "</div>" +
       results;
-    document.getElementById("officialSearch").oninput = (e) => {
-      officialQuery = e.target.value;
-      debouncedRenderOfficial();
+    const doOfficialSearch = () => {
+      officialQuery = document.getElementById("officialSearch").value;
+      renderOfficial();
     };
+    document.getElementById("officialSearchBtn").onclick = doOfficialSearch;
+    document.getElementById("officialSearch").onkeydown = (e) => { if (e.key === "Enter") doOfficialSearch(); };
     bindFlashcardControls(officialPanel);
   }
 
