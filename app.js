@@ -25,9 +25,27 @@
     officialGlossary: OFFICIAL,
   } = fetchedData;
   const TERMS_BY_DAY = new Map();
+  const TERMS_BY_NAME = new Map();
   for (const term of ALL_TERMS) {
     if (!TERMS_BY_DAY.has(term.sourceDay)) TERMS_BY_DAY.set(term.sourceDay, []);
     TERMS_BY_DAY.get(term.sourceDay).push(term);
+    TERMS_BY_NAME.set(term.w, term);
+  }
+
+  function parseLinks(text) {
+    const parts = String(text ?? "").split(/\[\[([^\]]+)\]\]/);
+    let out = "";
+    for (let i = 0; i < parts.length; i++) {
+      if (i % 2 === 0) {
+        out += esc(parts[i]);
+      } else {
+        const w = parts[i];
+        out += TERMS_BY_NAME.has(w)
+          ? '<span class="term-link" data-w="' + esc(w) + '">' + esc(w) + "</span>"
+          : esc(w);
+      }
+    }
+    return out;
   }
 
   const START_KEY = "ap96_start_date",
@@ -396,6 +414,15 @@
           label + "</button>",
       )
       .join("");
+    const easySection = t.easy
+      ? '<div class="term-easy"><b>やさしく言うと：</b>' + esc(t.easy) + "</div>"
+      : "";
+    const exSection = t.ex
+      ? '<div class="term-ex"><b>例示：</b>' + parseLinks(t.ex) + "</div>"
+      : "";
+    const matomeSection = t.matome
+      ? '<div class="term-matome"><b>まとめ：</b>' + esc(t.matome) + "</div>"
+      : "";
     return (
       '<div class="flashcard" data-key="' + esc(key) + '">' +
       '<div class="fc-front">' +
@@ -406,8 +433,11 @@
       "</div>" +
       '<div class="fc-back" hidden>' +
       official +
+      easySection +
       '<p class="fc-def">' + esc(t.d) + "</p>" +
+      exSection +
       '<div class="term-example"><b>身近な関連：</b>' + esc(t.example) + "</div>" +
+      matomeSection +
       source +
       '<div class="mastery">' + rates + "</div>" +
       "</div>" +
@@ -727,6 +757,46 @@
         onRate(button.dataset.key, button.dataset.rate);
       }),
     );
+    root.querySelectorAll(".term-link").forEach(
+      (link) => (link.onclick = (e) => {
+        e.stopPropagation();
+        showTermModal(link.dataset.w);
+      }),
+    );
+  }
+
+  function showTermModal(w) {
+    const term = TERMS_BY_NAME.get(w);
+    if (!term) return;
+    let overlay = document.getElementById("term-modal-overlay");
+    if (!overlay) {
+      overlay = document.createElement("div");
+      overlay.id = "term-modal-overlay";
+      overlay.innerHTML =
+        '<div id="term-modal">' +
+        '<button id="term-modal-close" aria-label="閉じる">✕</button>' +
+        '<div id="term-modal-body"></div>' +
+        "</div>";
+      document.body.appendChild(overlay);
+      overlay.addEventListener("click", (e) => {
+        if (e.target === overlay) overlay.hidden = true;
+      });
+      document.getElementById("term-modal-close").onclick = () => {
+        overlay.hidden = true;
+      };
+    }
+    const body = document.getElementById("term-modal-body");
+    body.innerHTML = termHtml(term, true);
+    const card = body.querySelector(".flashcard");
+    if (card) {
+      const back = card.querySelector(".fc-back");
+      const trigger = card.querySelector(".fc-trigger");
+      if (back) back.hidden = false;
+      if (trigger) trigger.setAttribute("aria-expanded", "true");
+      card.dataset.revealed = "1";
+    }
+    bindFlashcardControls(body);
+    overlay.hidden = false;
   }
 
   function bindStudyControls() {
