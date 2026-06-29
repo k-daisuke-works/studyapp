@@ -733,7 +733,16 @@ tr:last-child td {
 }
 .ex-table th {
   background: #dbeafe;
+  color: #1e293b;
   font-weight: 600;
+}
+.ex-table th .term-link,
+.ex-table th .term-nocard,
+.ex-diagram-label .term-link,
+.ex-diagram-label .term-nocard {
+  color: inherit;
+  border-bottom-color: currentColor;
+  text-decoration: none;
 }
 .ex-table tr:nth-child(even) td {
   background: #f8faff;
