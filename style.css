@@ -691,6 +691,18 @@ tr:last-child td {
   line-height: 1.75;
   white-space: pre-line;
 }
+.ex-code {
+  font-family: 'Courier New', Menlo, monospace;
+  font-size: 12px;
+  white-space: pre;
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 4px;
+  padding: 8px 10px;
+  margin: 6px 0;
+  overflow-x: auto;
+  line-height: 1.6;
+}
 .ex-table {
   border-collapse: collapse;
   width: 100%;

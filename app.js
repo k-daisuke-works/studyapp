@@ -70,17 +70,27 @@
     let i = 0;
     while (i < lines.length) {
       if (lines[i].trimStart().startsWith("|")) {
+        // 半角パイプ: markdownテーブル
         const tableLines = [];
         while (i < lines.length && lines[i].trimStart().startsWith("|")) tableLines.push(lines[i++]);
         segments.push({ type: "table", lines: tableLines });
+      } else if (lines[i].startsWith("【これが")) {
+        // コード図ブロック: 空行が来るまでを<pre>で包む
+        const diagramLines = [];
+        while (i < lines.length && lines[i] !== "") diagramLines.push(lines[i++]);
+        segments.push({ type: "diagram", lines: diagramLines });
       } else {
         const textLines = [];
-        while (i < lines.length && !lines[i].trimStart().startsWith("|")) textLines.push(lines[i++]);
+        while (i < lines.length && !lines[i].trimStart().startsWith("|") && !lines[i].startsWith("【これが")) textLines.push(lines[i++]);
         const content = textLines.join("\n").replace(/^\n+/, "").replace(/\n+$/, "");
         if (content) segments.push({ type: "text", content });
       }
     }
-    return segments.map((s) => s.type === "text" ? parseLinks(s.content) : renderMdTable(s.lines)).join("");
+    return segments.map((s) => {
+      if (s.type === "text") return parseLinks(s.content);
+      if (s.type === "table") return renderMdTable(s.lines);
+      return '<pre class="ex-code">' + parseLinks(s.lines.join("\n")) + "</pre>";
+    }).join("");
   }
 
   const START_KEY = "ap96_start_date",
