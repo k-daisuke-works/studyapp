@@ -42,7 +42,7 @@
         const w = parts[i];
         out += TERMS_BY_NAME.has(w)
           ? '<span class="term-link" data-w="' + esc(w) + '">' + esc(w) + "</span>"
-          : esc(w);
+          : '<span class="term-nocard" title="このアプリにカードがない用語">' + esc(w) + '<sup>※</sup></span>';
       }
     }
     return out;

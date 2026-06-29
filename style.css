@@ -718,6 +718,15 @@ tr:last-child td {
   text-transform: uppercase;
   letter-spacing: .03em;
 }
+.term-nocard {
+  color: #64748b;
+  border-bottom: 1px dashed #94a3b8;
+  cursor: help;
+}
+.term-nocard sup {
+  font-size: 10px;
+  color: #94a3b8;
+}
 .term-link {
   color: #2563eb;
   text-decoration: underline;
