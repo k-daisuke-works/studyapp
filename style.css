@@ -751,30 +751,40 @@ tr:last-child td {
   font-weight: 600;
   color: #075985;
   font-size: 12px;
-  margin-top: 10px;
-  margin-bottom: 3px;
-  padding-bottom: 3px;
+  margin-top: 16px;
+  margin-bottom: 6px;
+  padding-bottom: 4px;
   border-bottom: 1px solid #bae6fd;
 }
 .ex-section-header:first-child {
   margin-top: 0;
 }
 .ex-list {
-  margin: 3px 0 6px 0;
+  margin: 4px 0 8px 0;
   padding-left: 0;
   list-style: none;
 }
 .ex-list li {
-  margin-bottom: 2px;
+  margin-bottom: 4px;
   padding-left: 1em;
   text-indent: -1em;
+  line-height: 1.6;
 }
 .ex-list li::before {
   content: "・";
   color: #0284c7;
 }
 .ex-para {
-  margin: 3px 0 6px 0;
+  margin: 4px 0 8px 0;
+  line-height: 1.6;
+}
+.ex-note {
+  margin: 4px 0 8px 0;
+  color: #64748b;
+  font-size: 12px;
+  padding-left: 0.8em;
+  border-left: 2px solid #bae6fd;
+  line-height: 1.6;
 }
 .term-ex b {
   color: #1d4ed8;

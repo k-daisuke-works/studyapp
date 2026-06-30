@@ -171,7 +171,9 @@
       } else {
         const tl = [];
         while (i < lines.length && !lines[i].startsWith("■ ") && !lines[i].trimStart().startsWith("|") && !lines[i].startsWith("・") && !lines[i].startsWith("- ") && lines[i] !== "") tl.push(lines[i++]);
-        parts.push('<p class="ex-para">' + parseLinks(tl.join("<br>")) + "</p>");
+        const content = tl.join("<br>");
+        const cls = tl[0]?.startsWith("→") ? "ex-note" : "ex-para";
+        parts.push('<p class="' + cls + '">' + parseLinks(content) + "</p>");
       }
     }
     return parts.join("");
