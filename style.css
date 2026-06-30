@@ -761,10 +761,17 @@ tr:last-child td {
 }
 .ex-list {
   margin: 3px 0 6px 0;
-  padding-left: 16px;
+  padding-left: 0;
+  list-style: none;
 }
 .ex-list li {
   margin-bottom: 2px;
+  padding-left: 1em;
+  text-indent: -1em;
+}
+.ex-list li::before {
+  content: "・";
+  color: #0284c7;
 }
 .ex-para {
   margin: 3px 0 6px 0;
