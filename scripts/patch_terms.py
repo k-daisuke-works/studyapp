@@ -5,7 +5,7 @@
 パッチファイルの形式（extract_terms.py の出力を直接使える）:
   {
     "terms": [
-      { "w": "用語名", "sourceDay": 1, "d": "新しい解説", "example": "新しい例" },
+      { "w": "用語名", "sourceTheme": 1, "d": "新しい解説", "example": "新しい例" },
       ...
     ]
   }
@@ -21,12 +21,12 @@ import argparse
 import shutil
 from pathlib import Path
 
-DATA_PATH = Path("data.json")
-BACKUP_PATH = Path("data.json.bak")
+DATA_PATH = Path("data/data.json")
+BACKUP_PATH = Path("data/data.json.bak")
 
 
 def term_key(term):
-    return f"{term['sourceDay']}::{term['w']}"
+    return f"{term['sourceTheme']}::{term['w']}"
 
 
 def main():
@@ -42,7 +42,7 @@ def main():
         patch = json.load(f)
 
     patch_terms = patch.get("terms", patch) if isinstance(patch, dict) else patch
-    patch_map = {term_key(t): t for t in patch_terms if "w" in t and "sourceDay" in t}
+    patch_map = {term_key(t): t for t in patch_terms if "w" in t and "sourceTheme" in t}
 
     with open(DATA_PATH, encoding="utf-8") as f:
         data = json.load(f)

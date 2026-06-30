@@ -2,12 +2,21 @@
 (async () => {
   const loading = document.getElementById("loading");
   const appEl = document.getElementById("app");
-  let fetchedData;
+  const DAI_SLUGS = [
+    "kiso-riron", "computer-system", "gijutsu-yoso", "kaihatsu-gijutsu",
+    "project-mgmt", "service-mgmt", "kigyo-homu", "keiei-senryaku", "system-senryaku",
+  ];
+  const fetchJson = (path) => fetch(path).then((r) => {
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return r.json();
+  });
+  let meta, glossary, termChunks;
   try {
-    fetchedData = await fetch("data.json").then((r) => {
-      if (!r.ok) throw new Error("HTTP " + r.status);
-      return r.json();
-    });
+    [meta, glossary, ...termChunks] = await Promise.all([
+      fetchJson("data/data-meta.json"),
+      fetchJson("data/data-glossary.json"),
+      ...DAI_SLUGS.map((s) => fetchJson(`data/data-terms-${s}.json`)),
+    ]);
   } catch {
     if (loading)
       loading.innerHTML =
@@ -17,18 +26,16 @@
   }
   if (loading) loading.hidden = true;
   if (appEl) appEl.hidden = false;
-  const {
-    days: DAYS,
-    allTerms: ALL_TERMS,
-    calc: CALC,
-    afternoon: AFTERNOON,
-    officialGlossary: OFFICIAL,
-  } = fetchedData;
+  const THEMES = meta.themes;
+  const CALC = meta.calc;
+  const AFTERNOON = meta.afternoon;
+  const OFFICIAL = glossary;
+  const ALL_TERMS = termChunks.flat();
   const TERMS_BY_DAY = new Map();
   const TERMS_BY_NAME = new Map();
   for (const term of ALL_TERMS) {
-    if (!TERMS_BY_DAY.has(term.sourceDay)) TERMS_BY_DAY.set(term.sourceDay, []);
-    TERMS_BY_DAY.get(term.sourceDay).push(term);
+    if (!TERMS_BY_DAY.has(term.sourceTheme)) TERMS_BY_DAY.set(term.sourceTheme, []);
+    TERMS_BY_DAY.get(term.sourceTheme).push(term);
     TERMS_BY_NAME.set(term.w, term);
   }
 
@@ -135,6 +142,39 @@
       const label = '<div class="ex-diagram-label">' + parseLinks(header) + "</div>";
       return label + renderDiagramBody(body);
     }).join("");
+  }
+
+  function parseExampleContent(text) {
+    const str = String(text ?? "");
+    if (!str.startsWith("■ ") && !str.includes("\n■ ")) return parseLinks(str);
+    const lines = str.split("\n");
+    const parts = [];
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i];
+      if (line.startsWith("■ ")) {
+        parts.push('<div class="ex-section-header">' + esc(line) + "</div>");
+        i++;
+      } else if (line.trimStart().startsWith("|")) {
+        const tl = [];
+        while (i < lines.length && lines[i].trimStart().startsWith("|")) tl.push(lines[i++]);
+        parts.push(renderMdTable(tl));
+      } else if (line.startsWith("・") || line.startsWith("- ")) {
+        const li = [];
+        while (i < lines.length && (lines[i].startsWith("・") || lines[i].startsWith("- "))) {
+          li.push("<li>" + parseLinks(lines[i].replace(/^[・\-]\s*/, "")) + "</li>");
+          i++;
+        }
+        parts.push('<ul class="ex-list">' + li.join("") + "</ul>");
+      } else if (line === "") {
+        i++;
+      } else {
+        const tl = [];
+        while (i < lines.length && !lines[i].startsWith("■ ") && !lines[i].trimStart().startsWith("|") && !lines[i].startsWith("・") && !lines[i].startsWith("- ") && lines[i] !== "") tl.push(lines[i++]);
+        parts.push('<p class="ex-para">' + parseLinks(tl.join("<br>")) + "</p>");
+      }
+    }
+    return parts.join("");
   }
 
   const START_KEY = "ap96_start_date",
@@ -255,7 +295,7 @@
     return new Date(now.getFullYear(), now.getMonth(), now.getDate());
   }
 
-  const termKey = (t) => t.sourceDay + "::" + t.w;
+  const termKey = (t) => t.sourceTheme + "::" + t.w;
 
   function profile() {
     return studyMinutes === 15
@@ -486,7 +526,7 @@
         ? '<span class="official-card">IPA公式細目カード</span>'
         : "";
     const source =
-      showSource && t.sourceDay
+      showSource && t.sourceTheme
         ? '<small class="source">' +
           (t.sourceType === "official" ? "所属" : "補強") +
           ":「" + esc(t.sourceName) + "」</small>"
@@ -525,7 +565,7 @@
       easySection +
       '<p class="fc-def">' + esc(t.d) + "</p>" +
       exSection +
-      '<div class="term-example"><b>身近な関連：</b>' + esc(t.example) + "</div>" +
+      '<div class="term-example">' + parseExampleContent(t.example) + "</div>" +
       matomeSection +
       source +
       '<div class="mastery">' + rates + "</div>" +
@@ -954,11 +994,11 @@
       todayDone = currentStudyDay < schedule.currentDay ||
         (isCurrentDay && doneDates.has(todayId()));
 
-    const sourceDays = [...new Set(todayTerms.map((t) => t.sourceDay))];
-    if (todayTerms[0]?.sourceDay) currentTheme = todayTerms[0].sourceDay;
+    const sourceThemes = [...new Set(todayTerms.map((t) => t.sourceTheme))];
+    if (todayTerms[0]?.sourceTheme) currentTheme = todayTerms[0].sourceTheme;
     let themeHeader, practiceLinks, tables;
-    if (sourceDays.length === 1) {
-      const d = DAYS[sourceDays[0] - 1];
+    if (sourceThemes.length === 1) {
+      const d = THEMES[sourceThemes[0] - 1];
       themeHeader =
         '<span class="badge" style="background:' + color(d.kei) + '">' + esc(d.kei) + "</span>" +
         '<div class="crumb">' + esc(d.dai) + " ▸ 中分類" + d.chuNo + " " + esc(d.chuName) + "</div>" +
@@ -971,8 +1011,8 @@
         ? '<details class="reference"><summary>📋 余力があれば見る参考表（' + d.tables.length + "個）</summary>" +
           d.tables.map(tableHtml).join("") + "</details>"
         : "";
-    } else if (sourceDays.length === 0) {
-      const d = DAYS[currentTheme - 1];
+    } else if (sourceThemes.length === 0) {
+      const d = THEMES[currentTheme - 1];
       themeHeader =
         '<span class="badge" style="background:' + color(d.kei) + '">' + esc(d.kei) + "</span>" +
         '<div class="crumb">' + esc(d.dai) + " ▸ 中分類" + d.chuNo + " " + esc(d.chuName) + "</div>" +
@@ -984,14 +1024,14 @@
       tables = "";
     } else {
       themeHeader =
-        '<div class="crumb">複数テーマ（' + sourceDays.length + "テーマ）</div>" +
+        '<div class="crumb">複数テーマ（' + sourceThemes.length + "テーマ）</div>" +
         "<h2>この日の学習カード</h2>" +
         '<p class="intro">' +
-        sourceDays.map((n) => DAYS[n - 1]?.subName).filter(Boolean).join("・") +
+        sourceThemes.map((n) => THEMES[n - 1]?.subName).filter(Boolean).join("・") +
         "</p>";
-      practiceLinks = sourceDays
+      practiceLinks = sourceThemes
         .map((n) => {
-          const d = DAYS[n - 1];
+          const d = THEMES[n - 1];
           return d
             ? '<a class="practice" style="margin-bottom:6px" href="' + esc(d.url) +
               '" target="_blank" rel="noopener">' + esc(d.subName) + " の過去問を解く ↗</a>"
@@ -1030,7 +1070,7 @@
       '<h3 class="section-title">📚 この日の知識（' + todayTerms.length + "項目）" + streakBadge +
       '<small class="kb-hint">開封後 1=○ 2=△ 3=×</small></h3>' +
       (todayTerms.length
-        ? todayTerms.map((t) => termHtml(t, sourceDays.length > 1)).join("")
+        ? todayTerms.map((t) => termHtml(t, sourceThemes.length > 1)).join("")
         : '<div class="empty">新規知識はすべて評価済みです。苦手復習と過去問へ進みましょう。</div>') +
       tables + practiceLinks +
       "</div></article>" +
@@ -1091,7 +1131,7 @@
   }
 
   function renderAll() {
-    const indexed = DAYS.map((d, i) => ({
+    const indexed = THEMES.map((d, i) => ({
       ...d,
       day: i + 1,
       allDayTerms: TERMS_BY_DAY.get(i + 1) || [],
@@ -1190,7 +1230,7 @@
         document.querySelectorAll(".theme-expand").forEach((el) => el.remove());
         document.querySelectorAll(".theme-row.expanded").forEach((el) => el.classList.remove("expanded"));
         b.classList.add("expanded");
-        const d = DAYS[day - 1];
+        const d = THEMES[day - 1];
         const terms = TERMS_BY_DAY.get(day) || [];
         const div = document.createElement("div");
         div.className = "theme-expand";
@@ -1338,7 +1378,7 @@
 
     const byKei = { テクノロジ系: [0, 0], マネジメント系: [0, 0], ストラテジ系: [0, 0] };
     for (const t of ALL_TERMS) {
-      const day = DAYS[t.sourceDay - 1];
+      const day = THEMES[t.sourceTheme - 1];
       if (!day || !byKei[day.kei]) continue;
       byKei[day.kei][1]++;
       if (mastery[termKey(t)]) byKei[day.kei][0]++;

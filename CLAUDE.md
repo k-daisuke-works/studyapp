@@ -7,11 +7,28 @@
 | `index.html` | 2KB | HTML骨格のみ |
 | `style.css` | 12KB | 全CSS（可読形式・875行） |
 | `app.js` | 25KB | 全ロジック（可読形式・996行） |
-| `data.json` | 5.4MB | 全学習データ — **直接読まないこと** |
-| `index.html.bak` | 5.5MB | 分割前バックアップ（触らない） |
+| `data/data.json` | 5.1MB | 全学習データのマスター — **直接読まないこと** |
+| `data/data-meta.json` | 600KB | themes / calc / afternoon（アプリが最初にロード） |
+| `data/data-glossary.json` | 731KB | officialGlossary（検索専用） |
+| `data/data-terms-*.json` | 140〜920KB | allTerms を dai（大分類）単位に分割した9ファイル |
+| `bak/index.html.bak` | 5.5MB | 分割前バックアップ（触らない） |
 
-> **重要**: `data.json` は巨大すぎてトークン爆死します。
-> 読む場合は必ず `scripts/extract_terms.py` でサブセット抽出してから。
+> **重要**: `data/data.json` はマスターファイル。アプリは `data/data-meta.json` と `data/data-terms-*.json` を読む。
+> Claude が用語データを読む場合は該当の `data/data-terms-*.json` を直接 Read すること（`extract_terms.py` 不要）。
+
+### data-terms-*.json のファイル名対応
+
+| ファイル名 | 大分類 | テーマ数 |
+|---|---|---|
+| `data-terms-kiso-riron.json` | 基礎理論 | 10 |
+| `data-terms-computer-system.json` | コンピュータシステム | 13 |
+| `data-terms-gijutsu-yoso.json` | 技術要素 | 19 |
+| `data-terms-kaihatsu-gijutsu.json` | 開発技術 | 10 |
+| `data-terms-project-mgmt.json` | プロジェクトマネジメント | 11 |
+| `data-terms-service-mgmt.json` | サービスマネジメント | 7 |
+| `data-terms-kigyo-homu.json` | 企業と法務 | 8 |
+| `data-terms-keiei-senryaku.json` | 経営戦略 | 11 |
+| `data-terms-system-senryaku.json` | システム戦略 | 7 |
 
 ## 開発サーバー
 
@@ -27,7 +44,7 @@ python3 -m http.server 8080
 
 ```
 {
-  days: Day[96],
+  themes: Theme[96],
   allTerms: Term[5496],   // detail: 621件 + official: 4875件
   calc: Calc[20],
   afternoon: Afternoon[11],
@@ -44,10 +61,10 @@ python3 -m http.server 8080
   ja: string,          // 日本語名
   d: string,           // 解説文
   example: string,     // 身近な使用例
-  sourceDay: number,   // 所属 Day (1-96)
-  sourceName: string,  // テーマ名（Day の subName と一致）
+  sourceTheme: number, // 所属テーマ番号 (1-96)
+  sourceName: string,  // テーマ名（テーマの subName と一致）
   sourceType?: "official",  // 公式細目カードのみ付与
-  sourceRealWorld?: string  // detail カードのみ（Day 共通の背景説明）
+  sourceRealWorld?: string  // detail カードのみ（テーマ共通の背景説明）
 }
 ```
 
@@ -63,7 +80,7 @@ python3 -m http.server 8080
 }
 ```
 
-### Day（days の各要素）
+### テーマ（themes の各要素）
 
 ```
 {
@@ -77,7 +94,7 @@ python3 -m http.server 8080
   urlNote: string,
   intro: string,
   tables: Table[],
-  terms: Term[]       // 未使用。app.js は allTerms を sourceDay で絞って使う
+  terms: Term[]       // 未使用。app.js は allTerms を sourceTheme で絞って使う
 }
 ```
 
@@ -108,8 +125,8 @@ python3 -m http.server 8080
 | キー | 型 | 内容 |
 |---|---|---|
 | `ap96_done_dates` | string[] | 学習完了した日付の配列（"YYYY-MM-DD"[]）|
-| `ap96_mastery` | object | `"sourceDay::term"` → `"known"\|"unsure"\|"unknown"` |
-| `ap96_mastery_at` | object | `"sourceDay::term"` → 最終評価日 "YYYY-MM-DD" |
+| `ap96_mastery` | object | `"sourceTheme::term"` → `"known"\|"unsure"\|"unknown"` |
+| `ap96_mastery_at` | object | `"sourceTheme::term"` → 最終評価日 "YYYY-MM-DD" |
 | `ap96_minutes` | 15\|30\|45\|60 | 1日の学習時間（分） |
 | `ap96_exam_date` | "YYYY-MM-DD" | 受験予定日 |
 | `ap96_plan_mode` | "time"\|"exam" | 計画モード |
@@ -137,12 +154,17 @@ python3 -m http.server 8080
 ## データ操作スクリプト
 
 ```bash
-# official カードを Day 単位で抽出（出力先はセッションのスクラッチパスを使う）
-python3 scripts/extract_terms.py --type official --day 1
+# 用語データを直接読む場合は該当の data-terms-*.json を Read（extract_terms.py 不要）
 
-# 特定テーマの用語を検索
+# 用語をキーワード検索（全テーマ横断）
 python3 scripts/extract_terms.py --search "TCP"
+
+# テーマ単位で抽出したい場合（旧来の方法）
+python3 scripts/extract_terms.py --type official --theme 1
 
 # 修正済みJSONをdata.jsonに書き戻す（引数はスクラッチパス上の一時ファイル）
 python3 scripts/patch_terms.py <一時ファイルパス>
+
+# data.jsonを更新したら必ず分割ファイルを再生成する
+python3 scripts/split_data.py
 ```

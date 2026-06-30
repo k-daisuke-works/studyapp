@@ -4,39 +4,39 @@ data.json から用語サブセットを抽出して stdout に出力する。
 Claude がデータを直接読む代わりに使う。
 
 使い方:
-  python3 scripts/extract_terms.py --type official --day 1        # Day1のofficialカード
-  python3 scripts/extract_terms.py --type official --day 1-10     # Day1-10のofficialカード
-  python3 scripts/extract_terms.py --type official --day 1,3,5    # 指定Day複数
-  python3 scripts/extract_terms.py --type detail                  # detailカードのみ
-  python3 scripts/extract_terms.py --search "TCP"                 # 用語名/解説で検索
-  python3 scripts/extract_terms.py --day 5                        # Day5の全カード
-  python3 scripts/extract_terms.py --type official --limit 50     # 最初の50件
+  python3 scripts/extract_terms.py --type official --theme 1        # テーマ1のofficialカード
+  python3 scripts/extract_terms.py --type official --theme 1-10     # テーマ1-10のofficialカード
+  python3 scripts/extract_terms.py --type official --theme 1,3,5    # 指定テーマ複数
+  python3 scripts/extract_terms.py --type detail                    # detailカードのみ
+  python3 scripts/extract_terms.py --search "TCP"                   # 用語名/解説で検索
+  python3 scripts/extract_terms.py --theme 5                        # テーマ5の全カード
+  python3 scripts/extract_terms.py --type official --limit 50       # 最初の50件
 """
 
 import json
 import sys
 import argparse
 
-DATA_PATH = "data.json"
+DATA_PATH = "data/data.json"
 
 
-def parse_day_arg(day_str):
-    """1, 1-10, 1,3,5 などをday番号のsetに変換"""
-    days = set()
-    for part in day_str.split(","):
+def parse_theme_arg(theme_str):
+    """1, 1-10, 1,3,5 などをテーマ番号のsetに変換"""
+    themes = set()
+    for part in theme_str.split(","):
         part = part.strip()
         if "-" in part:
             start, end = part.split("-", 1)
-            days.update(range(int(start), int(end) + 1))
+            themes.update(range(int(start), int(end) + 1))
         else:
-            days.add(int(part))
-    return days
+            themes.add(int(part))
+    return themes
 
 
 def main():
     parser = argparse.ArgumentParser(description="data.jsonから用語を抽出")
     parser.add_argument("--type", choices=["official", "detail"], help="カード種別")
-    parser.add_argument("--day", help="Day番号 (例: 1 / 1-10 / 1,3,5)")
+    parser.add_argument("--theme", help="テーマ番号 (例: 1 / 1-10 / 1,3,5)")
     parser.add_argument("--search", help="w/d/example に含まれるキーワード")
     parser.add_argument("--limit", type=int, help="最大件数")
     parser.add_argument("--fields", help="出力フィールドをカンマ区切りで指定 (省略=全フィールド)")
@@ -53,10 +53,10 @@ def main():
     elif args.type == "detail":
         terms = [t for t in terms if t.get("sourceType") != "official"]
 
-    # フィルタ: day
-    if args.day:
-        target_days = parse_day_arg(args.day)
-        terms = [t for t in terms if t.get("sourceDay") in target_days]
+    # フィルタ: theme
+    if args.theme:
+        target_themes = parse_theme_arg(args.theme)
+        terms = [t for t in terms if t.get("sourceTheme") in target_themes]
 
     # フィルタ: キーワード検索
     if args.search:

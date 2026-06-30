@@ -7,7 +7,7 @@
     "splits": [
       {
         "original_w": "元の用語名（data.json と完全一致）",
-        "sourceDay": 42,
+        "sourceTheme": 42,
         "replace_with": [
           {
             "w": "新用語名",
@@ -20,7 +20,7 @@
     ]
   }
 
-- replace_with の各用語には sourceDay/sourceName/sourceType/full/ja は
+- replace_with の各用語には sourceTheme/sourceName/sourceType/full/ja は
   元のカードから自動引き継ぎ（明示的に指定した場合はそちら優先）
 - 元のカードは削除され、replace_with の用語が元の位置に挿入される
 - original_w にマッチしないエントリは警告を出してスキップ
@@ -36,8 +36,8 @@ import argparse
 import shutil
 from pathlib import Path
 
-DATA_PATH = Path("data.json")
-BACKUP_PATH = Path("data.json.bak")
+DATA_PATH = Path("data/data.json")
+BACKUP_PATH = Path("data/data.json.bak")
 
 
 def main():
@@ -51,10 +51,10 @@ def main():
 
     splits = split_def.get("splits", [])
 
-    # sourceDay::original_w → split定義 のマップ
+    # sourceTheme::original_w → split定義 のマップ
     split_map = {}
     for s in splits:
-        key = f"{s['sourceDay']}::{s['original_w']}"
+        key = f"{s['sourceTheme']}::{s['original_w']}"
         split_map[key] = s
 
     with open(DATA_PATH, encoding="utf-8") as f:
@@ -66,7 +66,7 @@ def main():
     new_card_count = 0
 
     for term in data["allTerms"]:
-        key = f"{term.get('sourceDay')}::{term.get('w')}"
+        key = f"{term.get('sourceTheme')}::{term.get('w')}"
         if key not in split_map:
             new_terms.append(term)
             continue
@@ -87,7 +87,7 @@ def main():
                 "ja":         term.get("ja", ""),
                 "d":          term.get("d", ""),
                 "example":    term.get("example", ""),
-                "sourceDay":  term.get("sourceDay"),
+                "sourceTheme":  term.get("sourceTheme"),
                 "sourceName": term.get("sourceName", ""),
                 "sourceType": term.get("sourceType"),
             }

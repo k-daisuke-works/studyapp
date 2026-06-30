@@ -747,6 +747,28 @@ tr:last-child td {
 .ex-table tr:nth-child(even) td {
   background: #f8faff;
 }
+.ex-section-header {
+  font-weight: 600;
+  color: #075985;
+  font-size: 12px;
+  margin-top: 10px;
+  margin-bottom: 3px;
+  padding-bottom: 3px;
+  border-bottom: 1px solid #bae6fd;
+}
+.ex-section-header:first-child {
+  margin-top: 0;
+}
+.ex-list {
+  margin: 3px 0 6px 0;
+  padding-left: 16px;
+}
+.ex-list li {
+  margin-bottom: 2px;
+}
+.ex-para {
+  margin: 3px 0 6px 0;
+}
 .term-ex b {
   color: #1d4ed8;
   font-size: 11px;
