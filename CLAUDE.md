@@ -188,16 +188,45 @@ python3 -m http.server 8080
 1. 対象用語リストを取得（`extract_terms.py` または `data-terms-*.json` を Read）
 2. 件数に応じてバッチ分割し、**同一メッセージで Agent(model=haiku) を並列起動**
 3. 各エージェントはバッチ分のパッチ JSON（`w` + `sourceTheme` + 更新フィールド）を生成して返す
-4. 結果を結合して `patch_terms.py` で apply
-5. `split_data.py` → `git commit` → `git push`
+4. **apply前にQA検証**（下記チェックリスト）を行い、引っかかった用語はエージェントに再依頼するか手動修正する
+5. 結果を結合して `patch_terms.py` で apply
+6. `split_data.py` → `git commit` → `git push`
+
+### apply前のQA検証チェックリスト
+
+Haikuバッチ生成は用語ごとに品質のムラが出やすい。**件数を目視確認するだけでなく、以下を機械的にチェックすること**：
+
+- **件数一致**：返ってきた件数が依頼件数と一致するか（大バッチ依頼時に一部が欠落する事故が起きやすい）
+- **用語名の完全一致**：`w` が元データの用語名と一文字も違わず一致するか（全角/半角括弧・カンマの取り違えが起きやすい。例：`（点推定，区間推定）`→`(点推定,区間推定)`）
+- **d フィールドに数式が必要な用語は数式が入っているか**：回帰分析・検定・確率分布・行列演算など「公式を使って計算する」ことが試験で問われる用語は、`=` や `Σ`, `β`, `log` などを含む具体的な式が本文にあるかを確認する（概念説明だけで式を省略しているケースがある）
+- **テーブル行の書式**：`example`/`ex` 内のテーブル行が規定の記号（`|` または全角 `｜`）で始まっているか
+
+```bash
+# 簡易チェック例（用語名不一致・d内の数式欠落を検出）
+python3 - << 'EOF'
+import json, re
+patch = json.load(open("<パッチファイル>", encoding="utf-8"))
+terms = patch.get("terms", patch)
+orig_names = {t["w"] for t in json.load(open("data/data-terms-XXX.json", encoding="utf-8"))}
+for t in terms:
+    if t["w"] not in orig_names:
+        print("NAME MISMATCH:", repr(t["w"]))
+    needs_formula = "分析" in t["w"] or "検定" in t["w"]
+    if needs_formula and "d" in t and not re.search(r'[=＝]|Σ|β|log|nCr|nPr', t["d"]):
+        print("FORMULA MAYBE MISSING:", t["w"])
+EOF
+```
 
 ### 各サブエージェントへの指示テンプレート
 
 ```
-以下N件の用語について example フィールドを書き直してください。
-card-format スキルの5セクション形式（■困り事/■これで解決/■仕組みを追う/■ゲームでの実例/■落とし穴）で書くこと。
+以下N件の用語について d・easy・example フィールドを書き直してください。
+card-format スキルに厳密に従うこと。特に d フィールドは、結果を導く計算式がある用語（回帰分析・検定・確率分布など）は
+式自体（y = a + bx、log(p/(1-p)) = …、r = Σ…/√… など）を必ず本文に書くこと。式の存在に触れるだけで式を省略するのは禁止。
+example は5セクション形式（■困り事/■これで解決/■仕組みを追う/■ゲームでの実例/■落とし穴）で書くこと。
 文章は一般人でもわかりやすい内容にし、専門用語は説明の後に（[[用語名]]）で添えること。
-結果は JSON 配列で返してください：[{"w": "用語名", "sourceTheme": N, "example": "..."}, ...]
+用語名（w）は下記リストの表記と一文字も違わず一致させること（括弧・カンマの全角/半角に注意）。
+結果は JSON 配列で返してください：[{"w": "用語名", "sourceTheme": N, "d": "...", "easy": "...", "example": "..."}, ...]
 
 対象用語と現在の d フィールド：
 （用語リスト）
